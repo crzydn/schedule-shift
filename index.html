@@ -33,7 +33,7 @@
     .sticky-bottom .primary{background:var(--brand);color:#fff;border-color:var(--brand);font-weight:800}
     @media (max-width:768px){.layout{grid-template-columns:1fr;height:auto}aside{order:2}main{order:1}}
 
-    /* FullCalendar 調整 */
+    /* FullCalendar 調整（装飾はそのまま） */
     .fc .fc-toolbar-title{font-weight:800}
     .fc .fc-button{border-radius:10px !important}
     .fc .fc-timegrid-slot{height:46px}
@@ -171,7 +171,14 @@
       headerToolbar: isMobile()? {left:'prev,next today',center:'title',right:'timeGridDay'} : {left:'prev,next today',center:'title',right:'timeGridWeek,timeGridDay'},
       initialView: isMobile()? 'timeGridDay' : 'timeGridWeek',
       firstDay:1, locale:'ja', height:'auto', slotMinTime:'09:00', slotMaxTime:'20:00', expandRows:true, stickyHeaderDates:true,
-      editable:true, eventOverlap:true, nowIndicator:true,
+      editable:true, 
+      eventOverlap:true,         // 重なり自体を許可
+      slotEventOverlap:true,     // 同時刻の横並びを許可（TimeGridの鍵）
+      nowIndicator:true,
+
+      slotDuration:'00:15:00',   // 15分グリッド
+      snapDuration:'00:15:00',   // 15分スナップ
+
       events:(info,success)=>{ success((events||[]).map(e=>({...e}))); },
       eventDidMount:(info)=>{ // スタッフ名から淡色パステル
         const m=/（(.*)）$/.exec(info.event.title||''); const staffName=m?m[1]:''; let h=0; for(let i=0;i<staffName.length;i++) h=(h*31+staffName.charCodeAt(i))>>>0; const hue=h%360;
@@ -272,23 +279,28 @@
           const idx = dayNames.indexOf(d); if(idx<0){ skipped++; continue; }
           const day = new Date(monday); day.setDate(monday.getDate()+idx);
           const st = p.time; const en = addMinStr(st, u.duration);
-          const candidates = staff.filter(s=> hasShiftLocal(s.id,d,st,en)).sort((a,b)=> (a.type==='PT'?0:1)-(b.type==='PT'?0:1));
-          const stf = candidates[0] || staff[0]; if(!stf){ skipped++; continue; }
-          const startISO = `${fmtDateLocal(day)}T${st}:00`;
-          const endISO   = `${fmtDateLocal(day)}T${en}:00`;
+          const candidates = staff.filter(s=> hasShiftLocal(s.id,d,st,en))
+  .sort((a,b)=> (a.type==='PT'?0:1)-(b.type==='PT'?0:1));
 
-          // 同スタッフ同時間帯の重複回避（当週の events だけで判定）
-          const ns = new Date(startISO), ne = new Date(endISO);
-          const clash = (events||[]).some(ev=>{
-            const m=/（(.*)）$/.exec(ev.title||''); const name=m?m[1]:'';
-            if(name!==stf.name) return false;
-            const s=new Date(ev.start), e=new Date(ev.end||ev.start);
-            return !(e<=ns || s>=ne);
-          });
-          if(clash){ skipped++; continue; }
+const startISO = `${fmtDateLocal(day)}T${st}:00`;
+const endISO   = `${fmtDateLocal(day)}T${en}:00`;
+const ns = new Date(startISO), ne = new Date(endISO);
 
-          events.push({ title:`${u.name}（${stf.name}）`, start:startISO, end:endISO });
-          placed++;
+// 候補スタッフを順にあてて、衝突しない最初の人を採用
+let picked = null;
+for (const cand of (candidates.length ? candidates : staff)) {
+  const clash = (events||[]).some(ev=>{
+    const m=/（(.*)）$/.exec(ev.title||''); const name=m?m[1]:'';
+    if(name!==cand.name) return false;
+    const s=new Date(ev.start), e=new Date(ev.end||ev.start);
+    return !(e<=ns || s>=ne);
+  });
+  if (!clash) { picked = cand; break; }
+}
+if (!picked) { skipped++; continue; }
+
+events.push({ title:`${u.name}（${picked.name}）`, start:startISO, end:endISO });
+placed++;
         }
       }
 
