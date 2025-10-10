@@ -8,10 +8,18 @@
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
   <style>
     :root{
-      --brand:#2f7df6; --brand-2:#5fb2ff; --bg:#f5f9ff; --panel:#ffffff; --line:#d9e7fb; --text:#0c1b2a; --muted:#6c7a90;
-      --chip:#eef6ff; --danger:#e24a4a; --ok:#2fbf71; --shadow:0 2px 10px rgba(12,27,42,.06);
-      --event-border:rgba(255,255,255,.95);
-    }
+  --brand:#2F7DF6;      /* メイン（青） */
+  --brand-2:#6BB6FF;    /* グラデ2 */
+  --bg:#F6FAFF;         /* 画面背景 */
+  --panel:#FFFFFF;      /* カード/パネル */
+  --line:#D9E7FB;       /* 枠線/区切り */
+  --text:#0C1B2A;       /* 本文 */
+  --muted:#6E7F95;      /* 補足/ラベル */
+  --chip:#EEF6FF;       /* チップ背景 */
+  --danger:#E05252;     /* 削除 */
+  --ok:#2FBF71;         /* 成功 */
+  --event-border:rgba(255,255,255,.96);
+}
     body{font-family:'Noto Sans JP',system-ui,sans-serif;margin:0;background:var(--bg);color:var(--text)}
     header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;display:flex;justify-content:space-between;align-items:center;padding:10px 16px;box-shadow:var(--shadow)}
     header h1{margin:0;font-size:1.06rem;letter-spacing:.2px}
@@ -58,6 +66,53 @@
       aside{display:none}
       main{border:none}
     }
+/* --- 左カラムの操作ボタンを見やすく（最小差分・上書きのみ） --- */
+
+/* 通常の「追加」ボタン：塗り＋太字＋ホバーで色変化 */
+aside .row > button {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+  font-weight: 800;
+  box-shadow: 0 1px 4px rgba(47,125,246,.18);
+}
+aside .row > button:hover { filter: brightness(1.06); }
+aside .row > button:active { transform: translateY(1px); }
+aside .row > button:focus-visible {
+  outline: 2px solid #fff;
+  box-shadow: 0 0 0 3px rgba(47,125,246,.45);
+}
+
+/* チップ内「削除」ボタン：赤塗りで一目で分かる */
+.chip > button {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 800;
+}
+.chip > button:hover { filter: brightness(1.05); }
+
+/* 左下の「自動割当（表示週）」を強調 */
+.sticky-bottom .primary{
+  background: linear-gradient(180deg, var(--brand-2), var(--brand));
+  border-color: var(--brand);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(47,125,246,.28);
+}
+.sticky-bottom .primary:hover { filter: brightness(1.05); }
+.sticky-bottom .primary:active { transform: translateY(1px); }
+
+/* 入力部のラベルとプレースホルダのコントラスト調整 */
+label{ color: var(--text); opacity:.9; }
+input::placeholder{ color: #8FA6C3; }
+
+/* イベント内テキストのコントラスト確保（既存の淡色背景でも読める） */
+.fc-v-event, .fc-v-event .fc-event-title,
+.fc-v-event .fc-event-time, .fc-v-event .fc-event-main {
+  color: var(--text) !important;
+}
   </style>
 </head>
 <body>
