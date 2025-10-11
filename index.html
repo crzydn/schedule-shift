@@ -8,27 +8,19 @@
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
   <style>
     :root{
-  --brand:#2F7DF6;      /* メイン（青） */
-  --brand-2:#6BB6FF;    /* グラデ2 */
-  --bg:#F6FAFF;         /* 画面背景 */
-  --panel:#FFFFFF;      /* カード/パネル */
-  --line:#D9E7FB;       /* 枠線/区切り */
-  --text:#0C1B2A;       /* 本文 */
-  --muted:#6E7F95;      /* 補足/ラベル */
-  --chip:#EEF6FF;       /* チップ背景 */
-  --danger:#E05252;     /* 削除 */
-  --ok:#2FBF71;         /* 成功 */
-  --event-border:rgba(255,255,255,.96);
-}
+      --brand:#2F7DF6; --brand-2:#6BB6FF; --bg:#F6FAFF; --panel:#FFFFFF; --line:#D9E7FB;
+      --text:#0C1B2A; --muted:#6E7F95; --chip:#EEF6FF; --danger:#E05252; --ok:#2FBF71;
+      --event-border:rgba(255,255,255,.96);
+    }
     body{font-family:'Noto Sans JP',system-ui,sans-serif;margin:0;background:var(--bg);color:var(--text)}
-    header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;display:flex;justify-content:space-between;align-items:center;padding:10px 16px;box-shadow:var(--shadow)}
+    header{background:linear-gradient(90deg,var(--brand),var(--brand-2));color:#fff;display:flex;justify-content:space-between;align-items:center;padding:10px 16px}
     header h1{margin:0;font-size:1.06rem;letter-spacing:.2px}
     header .btns button{margin-left:6px;padding:8px 12px;border-radius:10px;border:1px solid #fff;background:rgba(255,255,255,.12);color:#fff;font-weight:800;cursor:pointer}
     header .btns button:hover{background:rgba(255,255,255,.2)}
     .layout{display:grid;grid-template-columns:380px 1fr;gap:12px;height:calc(100vh - 58px);padding:12px;box-sizing:border-box}
-    aside,main{background:var(--panel);border-radius:14px;box-shadow:var(--shadow);overflow:auto}
-    aside{padding:14px;position:relative;border:1px solid var(--line)}
-    main{padding:6px;border:1px solid var(--line)}
+    aside,main{background:var(--panel);border-radius:14px;overflow:auto;border:1px solid var(--line)}
+    aside{padding:14px;position:relative}
+    main{padding:6px}
     h3{margin:8px 0;font-size:1rem}
     label{display:block;margin:6px 0 4px;font-weight:700}
     input,select,button{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;box-sizing:border-box;font-size:1rem}
@@ -41,7 +33,7 @@
     .sticky-bottom .primary{background:var(--brand);color:#fff;border-color:var(--brand);font-weight:800}
     @media (max-width:768px){.layout{grid-template-columns:1fr;height:auto}aside{order:2}main{order:1}}
 
-    /* FullCalendar 調整（装飾はそのまま） */
+    /* FullCalendar 調整 */
     .fc .fc-toolbar-title{font-weight:800}
     .fc .fc-button{border-radius:10px !important}
     .fc .fc-timegrid-slot{height:46px}
@@ -58,70 +50,135 @@
     .btn.danger{background:var(--danger);color:#fff;border-color:var(--danger)}
     .btn.ghost{background:#fff;color:var(--brand);border-color:var(--brand)}
 
-    /* 印刷 */
-    @media print{
-      @page{size:A4 landscape;margin:12mm}
+    /* もっと見る */
+    .list-collapsed{ max-height: 140px; overflow: hidden; position: relative; }
+    .list-collapsed::after{
+      content:""; position:absolute; left:0; right:0; bottom:0; height:48px;
+      background: linear-gradient(to bottom, rgba(255,255,255,0), var(--panel)); pointer-events:none;
+    }
+    .show-more-btn{
+      margin-top:6px; width:100%; background:var(--chip); border:1px solid var(--line);
+      border-radius:10px; padding:8px 10px; font-weight:800; color:var(--text); cursor:pointer;
+      display:block;
+    }
+    .show-more-btn:hover{ filter:brightness(1.03); }
+
+    /* 画面用：サイドバー/余白トグル（横幅最大化） */
+    body.sidebar-collapsed .layout{ grid-template-columns: 1fr !important; }
+    body.sidebar-collapsed aside{ display: none !important; }
+    body.edge-to-edge .layout{ padding: 0 !important; }
+    body.edge-to-edge main{ padding: 0 !important; border: none !important; border-radius: 0 !important; }
+    body.edge-to-edge #calendar{ min-height: 85vh; }
+    body.sidebar-collapsed .fc .fc-timegrid-axis-cushion{ font-size:11px; }
+    body.sidebar-collapsed .fc .fc-col-header-cell-cushion{ font-size:12px; }
+
+    /* ========= 印刷強化（表示中ビューをそのまま・高コントラスト） ========= */
+    @media print {
+      html, body, #calendar, .fc, .fc * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      html, body { height:auto; }
       header{display:none}
       .layout{grid-template-columns:1fr}
       aside{display:none}
       main{border:none}
+      .fc, .fc .fc-view-harness, .fc .fc-scrollgrid,
+      .fc .fc-scroller-harness, .fc .fc-scroller {
+        height:auto !important; overflow:visible !important;
+      }
+
+      /* 罫線/文字を濃くして視認性UP */
+      .fc-theme-standard td, .fc-theme-standard th{ border-color:#999; }
+      .fc .fc-timegrid-slot-lane{ border-color:#bbb; }
+      .fc .fc-col-header-cell{ border-bottom:2px solid #000; }
+      .fc .fc-col-header-cell-cushion{ color:#000; font-weight:800; font-size:11.5px; padding:3px 0; }
+      .fc .fc-timegrid-axis-cushion{ color:#000; font-weight:700; font-size:11px; padding:0; }
+      .fc .fc-day-today{ background:transparent !important; } /* 紙面ムラ防止 */
+      .fc .fc-timegrid-now-indicator-container{ display:none !important; }
+
+      /* イベント＝白地＋2px濃い枠＋太字（色抜け対策） */
+      .fc .fc-timegrid-event, .fc .fc-v-event, .fc .fc-event{
+        background:#fff !important;
+        border:2px solid #222 !important;
+        color:#000 !important;
+        box-shadow:none !important;
+        transform:none !important;
+        opacity:1 !important;
+        border-radius:8px !important;
+        padding:2px 4px !important;
+      }
+      .fc .fc-event-time{ font-weight:900 !important; }
+      .fc .fc-event-title{ font-weight:800 !important; }
+      .fc .fc-event-main{ white-space:normal !important; }
+
+      /* 改ページ抑制 */
+      .fc-timegrid-slots table, .fc-timegrid-slots tr, .fc-timegrid-slots td,
+      .fc-timegrid-body, .fc-scrollgrid, .fc-timegrid-cols, .fc-timegrid-axis, .fc-timegrid-slot{
+        break-inside:avoid; page-break-inside:avoid;
+      }
+
+      /* All-day は印刷でも非表示（カレンダー側もallDaySlot:false） */
+      .fc .fc-timegrid-all-day{ display:none !important; }
     }
-/* --- 左カラムの操作ボタンを見やすく（最小差分・上書きのみ） --- */
 
-/* 通常の「追加」ボタン：塗り＋太字＋ホバーで色変化 */
-aside .row > button {
-  background: var(--brand);
-  color: #fff;
-  border-color: var(--brand);
-  font-weight: 800;
-  box-shadow: 0 1px 4px rgba(47,125,246,.18);
-}
-aside .row > button:hover { filter: brightness(1.06); }
-aside .row > button:active { transform: translateY(1px); }
-aside .row > button:focus-visible {
-  outline: 2px solid #fff;
-  box-shadow: 0 0 0 3px rgba(47,125,246,.45);
-}
-
-/* チップ内「削除」ボタン：赤塗りで一目で分かる */
-.chip > button {
-  background: var(--danger);
-  color: #fff;
-  border-color: var(--danger);
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-weight: 800;
-}
-.chip > button:hover { filter: brightness(1.05); }
-
-/* 左下の「自動割当（表示週）」を強調 */
-.sticky-bottom .primary{
-  background: linear-gradient(180deg, var(--brand-2), var(--brand));
-  border-color: var(--brand);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(47,125,246,.28);
-}
-.sticky-bottom .primary:hover { filter: brightness(1.05); }
-.sticky-bottom .primary:active { transform: translateY(1px); }
-
-/* 入力部のラベルとプレースホルダのコントラスト調整 */
-label{ color: var(--text); opacity:.9; }
-input::placeholder{ color: #8FA6C3; }
-
-/* イベント内テキストのコントラスト確保（既存の淡色背景でも読める） */
-.fc-v-event, .fc-v-event .fc-event-title,
-.fc-v-event .fc-event-time, .fc-v-event .fc-event-main {
-  color: var(--text) !important;
+    /* 画面用のボタン配色を明示（印刷には影響させない） */
+    @media screen {
+      aside .row > button{
+        background:var(--brand); color:#fff; border-color:var(--brand);
+        font-weight:800; box-shadow:0 1px 4px rgba(47,125,246,.18);
+      }
+      .chip > button{
+        background:var(--danger); color:#fff; border-color:var(--danger);
+        padding:6px 10px; border-radius:999px; font-weight:800;
+      }
+      .sticky-bottom .primary{
+        background:linear-gradient(180deg,var(--brand-2),var(--brand));
+        border-color:var(--brand); color:#fff;
+        box-shadow:0 2px 8px rgba(47,125,246,.28);
+      }
+    }
+/* ========= 印刷文字強化 ========= */
+@media print {
+  .fc .fc-timegrid-event,
+  .fc .fc-v-event,
+  .fc .fc-event {
+    background: #fff !important;               /* 白背景でくっきり */
+    border: 2px solid #000 !important;         /* 太線で囲む */
+    color: #000 !important;                    /* 黒文字強制 */
+    font-weight: 900 !important;               /* 太字 */
+    font-size: 12pt !important;                /* 読みやすい大きさ */
+    opacity: 1 !important;
+    box-shadow: none !important;
+    transform: none !important;
+  }
+  .fc .fc-event-main {
+    white-space: normal !important;
+    color: #000 !important;
+    font-weight: 900 !important;
+    font-size: 12pt !important;
+  }
+  .fc .fc-timegrid-slot {
+    border-color: #888 !important;
+  }
+  .fc .fc-col-header-cell-cushion {
+    color: #000 !important;
+    font-weight: 800 !important;
+    font-size: 11pt !important;
+  }
+  .fc .fc-timegrid-axis-cushion {
+    color: #000 !important;
+    font-weight: 800 !important;
+  }
 }
   </style>
 </head>
-<body>
+
+<body class="edge-to-edge">
   <header>
     <h1>訪問看護スケジュール管理 v6.8.5</h1>
     <div class="btns">
       <button id="btnResetWeek">今週クリア</button>
-      <button id="btnPrint">印刷</button>
+      <button id="btnPrintCurrentA4">A4印刷(画面表示)</button>
       <button id="btnExportExcel">Excel出力</button>
+      <button id="btnToggleSidebar">サイドバー表示/非表示</button>
     </div>
   </header>
 
@@ -188,8 +245,11 @@ input::placeholder{ color: #8FA6C3; }
       userName:document.getElementById('userName'), userDuration:document.getElementById('userDuration'), addUser:document.getElementById('addUser'), userList:document.getElementById('userList'),
       patternUser:document.getElementById('patternUser'), patternDays:document.getElementById('patternDays'), patternTime:document.getElementById('patternTime'), addPattern:document.getElementById('addPattern'), patternList:document.getElementById('patternList'),
       shiftStaff:document.getElementById('shiftStaff'), shiftDays:document.getElementById('shiftDays'), shiftStart:document.getElementById('shiftStart'), shiftEnd:document.getElementById('shiftEnd'), addShift:document.getElementById('addShift'), shiftList:document.getElementById('shiftList'),
-      btnAutoAssignBottom:document.getElementById('btnAutoAssignBottom'), btnResetWeek:document.getElementById('btnResetWeek'), btnPrint:document.getElementById('btnPrint'), btnExportExcel:document.getElementById('btnExportExcel'),
-      calendarHost:document.getElementById('calendar')
+      btnAutoAssignBottom:document.getElementById('btnAutoAssignBottom'), btnResetWeek:document.getElementById('btnResetWeek'),
+      btnExportExcel:document.getElementById('btnExportExcel'),
+      calendarHost:document.getElementById('calendar'),
+      btnPrintCurrentA4:document.getElementById('btnPrintCurrentA4'),
+      btnToggleSidebar:document.getElementById('btnToggleSidebar')
     };
 
     // ====== Storage ======
@@ -206,10 +266,10 @@ input::placeholder{ color: #8FA6C3; }
     const renderAll=()=>{ hydrateSelects(); renderStaff(); renderUsers(); renderPatterns(); renderShifts(); };
 
     // ====== Mutations ======
-    el.addStaff.addEventListener('click',()=>{ const name=el.staffName.value.trim(); if(!name) return alert('スタッフ名を入力'); const type=el.staffType.value; staff.push({id:uid(),name,type}); el.staffName.value=''; save(); renderAll(); calendar.refetchEvents(); });
-    el.addUser.addEventListener('click',()=>{ const name=el.userName.value.trim(); if(!name) return alert('利用者名を入力'); const duration=parseInt(el.userDuration.value)||30; users.push({id:uid(),name,duration}); el.userName.value=''; save(); renderAll(); });
-    el.addPattern.addEventListener('click',()=>{ const userId=el.patternUser.value; const time=el.patternTime.value; const days=[...el.patternDays.querySelectorAll('input:checked')].map(c=>c.value); if(!userId||days.length===0) return alert('利用者と曜日を選択'); patterns.push({id:uid(),userId,time,days,active:true}); save(); renderPatterns(); });
-    el.addShift.addEventListener('click',()=>{ const staffId=el.shiftStaff.value; const days=[...el.shiftDays.querySelectorAll('input:checked')].map(c=>c.value); const s=el.shiftStart.value; const e=el.shiftEnd.value; if(!staffId||days.length===0) return alert('スタッフと曜日を選択'); shifts.push({id:uid(),staffId,days,start:s,end:e}); save(); renderShifts(); });
+    el.addStaff?.addEventListener('click',()=>{ const name=el.staffName.value.trim(); if(!name) return alert('スタッフ名を入力'); const type=el.staffType.value; staff.push({id:uid(),name,type}); el.staffName.value=''; save(); renderAll(); calendar.refetchEvents(); });
+    el.addUser?.addEventListener('click',()=>{ const name=el.userName.value.trim(); if(!name) return alert('利用者名を入力'); const duration=parseInt(el.userDuration.value)||30; users.push({id:uid(),name,duration}); el.userName.value=''; save(); renderAll(); });
+    el.addPattern?.addEventListener('click',()=>{ const userId=el.patternUser.value; const time=el.patternTime.value; const days=[...el.patternDays.querySelectorAll('input:checked')].map(c=>c.value); if(!userId||days.length===0) return alert('利用者と曜日を選択'); patterns.push({id:uid(),userId,time,days,active:true}); save(); renderPatterns(); });
+    el.addShift?.addEventListener('click',()=>{ const staffId=el.shiftStaff.value; const days=[...el.shiftDays.querySelectorAll('input:checked')].map(c=>c.value); const s=el.shiftStart.value; const e=el.shiftEnd.value; if(!staffId||days.length===0) return alert('スタッフと曜日を選択'); shifts.push({id:uid(),staffId,days,start:s,end:e}); save(); renderShifts(); });
 
     // 削除（委譲）
     document.body.addEventListener('click',(e)=>{
@@ -225,18 +285,17 @@ input::placeholder{ color: #8FA6C3; }
       timeZone:'local',
       headerToolbar: isMobile()? {left:'prev,next today',center:'title',right:'timeGridDay'} : {left:'prev,next today',center:'title',right:'timeGridWeek,timeGridDay'},
       initialView: isMobile()? 'timeGridDay' : 'timeGridWeek',
-      firstDay:1, locale:'ja', height:'auto', slotMinTime:'09:00', slotMaxTime:'20:00', expandRows:true, stickyHeaderDates:true,
-      editable:true, 
-      eventOverlap:true,         // 重なり自体を許可
-      slotEventOverlap:true,     // 同時刻の横並びを許可（TimeGridの鍵）
-      nowIndicator:true,
-
-      slotDuration:'00:15:00',   // 15分グリッド
-      snapDuration:'00:15:00',   // 15分スナップ
-
+      firstDay:1, locale:'ja', height:'auto',
+      slotMinTime:'09:00', slotMaxTime:'20:00',
+      expandRows:true, stickyHeaderDates:true,
+      editable:true,
+      eventOverlap:true, slotEventOverlap:true, nowIndicator:true,
+      slotDuration:'00:15:00', snapDuration:'00:15:00',
+      allDaySlot:false, /* ★ 終日行を完全に非表示 */
       events:(info,success)=>{ success((events||[]).map(e=>({...e}))); },
-      eventDidMount:(info)=>{ // スタッフ名から淡色パステル
-        const m=/（(.*)）$/.exec(info.event.title||''); const staffName=m?m[1]:''; let h=0; for(let i=0;i<staffName.length;i++) h=(h*31+staffName.charCodeAt(i))>>>0; const hue=h%360;
+      eventDidMount:(info)=>{
+        const m=/（(.*)）$/.exec(info.event.title||''); const staffName=m?m[1]:'';
+        let h=0; for(let i=0;i<staffName.length;i++) h=(h*31+staffName.charCodeAt(i))>>>0; const hue=h%360;
         info.el.style.background=`hsl(${hue} 85% 82%)`;
         info.el.style.borderColor='var(--event-border)';
       },
@@ -246,7 +305,12 @@ input::placeholder{ color: #8FA6C3; }
       eventClick:(info)=>{ showEventPreview(info.event); }
     });
 
-    function persistEvents(){ events = calendar.getEvents().map(ev=>({ title:ev.title, start:ev.start.toISOString(), end:ev.end.toISOString(), extendedProps: ev.extendedProps||{} })); save(); }
+    function persistEvents(){
+      events = calendar.getEvents().map(ev=>({
+        title:ev.title, start:ev.start.toISOString(), end:ev.end.toISOString(), extendedProps: ev.extendedProps||{}
+      }));
+      save();
+    }
 
     // ==== プレビュー／編集／削除 ====
     function showEventPreview(event){
@@ -288,7 +352,6 @@ input::placeholder{ color: #8FA6C3; }
           <button id="pvClose" class="btn ghost">閉じる</button>
         </div>
       `;
-
       document.body.appendChild(overlay); document.body.appendChild(box);
       const close=()=>{ overlay.remove(); box.remove(); };
       document.getElementById('pvClose').onclick=close;
@@ -307,7 +370,7 @@ input::placeholder{ color: #8FA6C3; }
       };
     }
 
-    // ====== Auto assign (PT優先 + 出勤帯適合) ======
+    // ====== 自動割当 ======
     function autoAssignWeek(){
       if(staff.length===0){ alert('スタッフを登録してください'); return; }
       if(users.length===0){ alert('利用者を登録してください'); return; }
@@ -318,10 +381,8 @@ input::placeholder{ color: #8FA6C3; }
       const monday = rng.monday; const nextMonday = rng.nextMonday;
       const inWeek = (iso)=>{ const d=new Date(iso); return d>=monday && d<nextMonday; };
 
-      // 表示週の既存イベントを events から除去（複製防止）
       events = (events||[]).filter(ev=> !inWeek(ev.start));
 
-      // 出勤パターン適合
       const hasShiftLocal = (stfId, dayLabel, startStr, endStr)=>{
         const sh = shifts.filter(x=>x.staffId===stfId && x.days.includes(dayLabel));
         return sh.some(x=> x.start<=startStr && x.end>=endStr );
@@ -335,45 +396,139 @@ input::placeholder{ color: #8FA6C3; }
           const day = new Date(monday); day.setDate(monday.getDate()+idx);
           const st = p.time; const en = addMinStr(st, u.duration);
           const candidates = staff.filter(s=> hasShiftLocal(s.id,d,st,en))
-  .sort((a,b)=> (a.type==='PT'?0:1)-(b.type==='PT'?0:1));
+            .sort((a,b)=> (a.type==='PT'?0:1)-(b.type==='PT'?0:1));
+          const startISO = `${fmtDateLocal(day)}T${st}:00`;
+          const endISO   = `${fmtDateLocal(day)}T${en}:00`;
+          const ns = new Date(startISO), ne = new Date(endISO);
 
-const startISO = `${fmtDateLocal(day)}T${st}:00`;
-const endISO   = `${fmtDateLocal(day)}T${en}:00`;
-const ns = new Date(startISO), ne = new Date(endISO);
+          let picked = null;
+          for (const cand of (candidates.length ? candidates : staff)) {
+            const clash = (events||[]).some(ev=>{
+              const m=/（(.*)）$/.exec(ev.title||''); const name=m?m[1]:'';
+              if(name!==cand.name) return false;
+              const s=new Date(ev.start), e=new Date(ev.end||ev.start);
+              return !(e<=ns || s>=ne);
+            });
+            if (!clash) { picked = cand; break; }
+          }
+          if (!picked) { skipped++; continue; }
 
-// 候補スタッフを順にあてて、衝突しない最初の人を採用
-let picked = null;
-for (const cand of (candidates.length ? candidates : staff)) {
-  const clash = (events||[]).some(ev=>{
-    const m=/（(.*)）$/.exec(ev.title||''); const name=m?m[1]:'';
-    if(name!==cand.name) return false;
-    const s=new Date(ev.start), e=new Date(ev.end||ev.start);
-    return !(e<=ns || s>=ne);
-  });
-  if (!clash) { picked = cand; break; }
-}
-if (!picked) { skipped++; continue; }
-
-events.push({ title:`${u.name}（${picked.name}）`, start:startISO, end:endISO });
-placed++;
+          events.push({ title:`${u.name}（${picked.name}）`, start:startISO, end:endISO });
+          placed++;
         }
       }
-
-      save();
-      calendar.refetchEvents();
+      save(); calendar.refetchEvents();
       alert(`自動割当 完了：配置 ${placed} 件 / 見送り ${skipped} 件（表示週）`);
     }
 
     // ====== Header buttons ======
     el.btnResetWeek.onclick=()=>{ const {monday,nextMonday}=getWeekRange(calendar.getDate()); calendar.getEvents().forEach(ev=>{ if(ev.start>=monday && ev.start<nextMonday) ev.remove(); }); persistEvents(); };
-    el.btnPrint.onclick=()=>window.print();
-    el.btnExportExcel.onclick=()=>{ const {monday,nextMonday}=getWeekRange(calendar.getDate()); const rows=[["日付","曜日","開始","終了","利用者","スタッフ","分数"]]; const jp=['日','月','火','水','木','金','土']; calendar.getEvents().forEach(ev=>{ if(!(ev.start>=monday && ev.start<nextMonday)) return; const m=/^(.*)（(.*)）$/.exec(ev.title||''); const user=m?m[1]:''; const stf=m?m[2]:''; const s=ev.start, e=ev.end||new Date(s.getTime()+30*60000); rows.push([fmtDateLocal(s),jp[s.getDay()],s.toTimeString().slice(0,5),e.toTimeString().slice(0,5),user,stf, Math.round((e-s)/60000)]); }); const csv=rows.map(r=>r.map(x=>`"${String(x).replaceAll('"','""')}"`).join(',')).join('\n'); const blob=new Blob(["\ufeff"+csv],{type:'text/csv;charset=utf-8;'}); const a=document.createElement('a'); const wk=fmtDateLocal(getWeekRange(calendar.getDate()).monday); a.href=URL.createObjectURL(blob); a.download=`訪問看護_週次_${wk}.csv`; a.click(); URL.revokeObjectURL(a.href); };
+
+    el.btnExportExcel.onclick=()=>{
+      const {monday,nextMonday}=getWeekRange(calendar.getDate());
+      const rows=[["日付","曜日","開始","終了","利用者","スタッフ","分数"]];
+      const jp=['日','月','火','水','木','金','土'];
+      calendar.getEvents().forEach(ev=>{
+        if(!(ev.start>=monday && ev.start<nextMonday)) return;
+        const m=/^(.*)（(.*)）$/.exec(ev.title||''); const user=m?m[1]:''; const stf=m?m[2]:'';
+        const s=ev.start, e=ev.end|| new Date(s.getTime()+30*60000);
+        rows.push([fmtDateLocal(s),jp[s.getDay()],s.toTimeString().slice(0,5),e.toTimeString().slice(0,5),user,stf, Math.round((e-s)/60000)]);
+      });
+      const csv=rows.map(r=>r.map(x=>`"${String(x).replaceAll('"','""')}"`).join(',')).join('\n');
+      const blob=new Blob(["\ufeff"+csv],{type:'text/csv;charset=utf-8;'});
+      const a=document.createElement('a');
+      const wk=fmtDateLocal(getWeekRange(calendar.getDate()).monday);
+      a.href=URL.createObjectURL(blob);
+      a.download=`訪問看護_週次_${wk}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+
+    // ====== 折りたたみ制御 ======
+    function setupCollapsible(listEl){
+      if(!listEl || listEl.dataset.collapsibleInit === '1') return;
+      listEl.dataset.collapsibleInit = '1';
+      listEl.classList.add('list-collapsed');
+
+      let btn = listEl.nextElementSibling;
+      if(!(btn && btn.classList && btn.classList.contains('show-more-btn'))){
+        btn = document.createElement('button'); btn.className='show-more-btn'; listEl.after(btn);
+      }
+      const setLabel = ()=> { btn.textContent = listEl.classList.contains('list-collapsed') ? 'もっと見る' : '閉じる'; };
+      btn.style.display = 'block';
+      setLabel();
+
+      btn.addEventListener('click', ()=>{
+        listEl.classList.toggle('list-collapsed');
+        setLabel();
+        setTimeout(()=>calendar.updateSize(), 0);
+      });
+
+      new MutationObserver(()=>{ setLabel(); }).observe(listEl, {childList:true});
+    }
 
     // 左下 自動割当
     el.btnAutoAssignBottom.addEventListener('click',autoAssignWeek);
 
+    // ====== 印刷：現在表示中のビューをそのまま出力 ======
+    function injectPageRuleByCurrentView(){
+      const old = document.getElementById('printPageRule'); if(old) old.remove();
+      const style = document.createElement('style');
+      style.id = 'printPageRule';
+      style.media = 'print';
+      const isWeek = /Week/i.test(calendar.view.type);
+      const rule = isWeek
+        ? '@page{ size: A4 landscape; margin:6mm; }'
+        : '@page{ size: A4 portrait;  margin:8mm; }';
+      style.appendChild(document.createTextNode(rule));
+      document.head.appendChild(style);
+    }
+
+    function printCurrentView(){
+      const hadSidebar = document.body.classList.contains('sidebar-collapsed');
+      const hadEdge    = document.body.classList.contains('edge-to-edge');
+      document.body.classList.add('sidebar-collapsed','edge-to-edge');
+
+      injectPageRuleByCurrentView();
+
+      calendar.refetchEvents();
+      calendar.updateSize();
+      calendar.render();
+
+      const cleanup = ()=>{
+        const s = document.getElementById('printPageRule'); if(s) s.remove();
+        document.body.classList.toggle('sidebar-collapsed', hadSidebar);
+        document.body.classList.toggle('edge-to-edge',     hadEdge);
+        setTimeout(()=>calendar.updateSize(), 0);
+        window.removeEventListener('afterprint', cleanup);
+      };
+      window.addEventListener('afterprint', cleanup);
+
+      requestAnimationFrame(()=>{
+        void document.body.offsetHeight;
+        setTimeout(()=> window.print(), 160);
+      });
+    }
+
+    el.btnPrintCurrentA4.addEventListener('click', printCurrentView);
+
+    // ====== 横幅：サイドバーだけトグル ======
+    (function setupWideToggles(){
+      const btnToggleSidebar = el.btnToggleSidebar;
+      if(!btnToggleSidebar) return;
+      btnToggleSidebar.addEventListener('click', ()=>{
+        document.body.classList.toggle('sidebar-collapsed');
+        setTimeout(()=> calendar.updateSize(), 0);
+      });
+      setTimeout(()=> calendar.updateSize(), 0);
+    })();
+
     // ====== Init ======
-    load(); renderWeekdayChecks(el.patternDays); renderWeekdayChecks(el.shiftDays); renderAll();
+    load();
+    renderWeekdayChecks(el.patternDays);
+    renderWeekdayChecks(el.shiftDays);
+    renderAll();
+    ['staffList','userList','patternList','shiftList'].forEach(id=> setupCollapsible(document.getElementById(id)));
     calendar.render();
   });
   </script>
