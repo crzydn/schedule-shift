@@ -43,7 +43,9 @@
   .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
   .chip{background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:6px 10px;display:flex;align-items:center;gap:8px}
   aside .row>button{background:var(--brand);color:#fff;border-color:var(--brand);font-weight:800;box-shadow:0 1px 4px rgba(47,125,246,.18)}
-  .chip>button{background:var(--danger);color:#fff;border-color:var(--danger);padding:6px 10px;border-radius:999px;font-weight:800}
+  .chip>button{border-radius:999px;font-weight:800;padding:6px 10px}
+  .chip .edit{background:#fff;color:var(--brand);border:1px solid var(--brand)}
+  .chip .delete{background:var(--danger);color:#fff;border:1px solid var(--danger)}
   .sticky-bottom .primary{background:linear-gradient(180deg,var(--brand-2),var(--brand));border-color:var(--brand);color:#fff;box-shadow:0 2px 8px rgba(47,125,246,.28)}
 
   #calendar{min-height:78vh}
@@ -117,7 +119,6 @@
   <div class="btns">
     <button id="btnResetWeek">今週分を消去</button>
     <button id="btnPrintCurrentA4">A4印刷(画面表示)</button>
-    <button id="btnExportExcel">Excel出力</button>
     <button id="btnToggleSidebar">サイドバー ON/OFF</button>
     <button id="btnToggleHeader">ヘッダー非表示</button>
     <button id="btnViewToggle" title="標準カレンダー／スタッフ別ボード">表示：標準</button>
@@ -147,6 +148,9 @@
       <input id="userName" placeholder="利用者氏名（例：田中）" />
       <select id="userDuration" style="max-width:120px"><option value="60">60分</option><option value="30">30分</option></select>
     </div>
+    <div class="row">
+      <input id="userAddress" placeholder="住所（任意：後から編集可）" />
+    </div>
     <div class="row"><button id="addUser">追加</button></div>
     <div id="userList" class="chips"></div>
 
@@ -162,6 +166,18 @@
     <label>NGにする利用者（複数選択可）</label>
     <div id="ngUsers" class="row" style="max-height:140px; overflow:auto; border:1px dashed var(--line); padding:8px; border-radius:10px"></div>
     <div class="row"><button id="btnAddNG">NG追加</button></div>
+
+    <h3>拠点（事務所）</h3>
+    <div class="row">
+      <input id="officeName" placeholder="拠点名（例：本社）" />
+    </div>
+    <div class="row">
+      <input id="officeAddress" placeholder="拠点住所（例：東京都○○…）" />
+    </div>
+    <div class="row">
+      <button id="btnSaveOffice">拠点を保存（住所→座標）</button>
+    </div>
+    <div id="officeInfo" class="muted" style="margin:6px 0 8px 0;"></div>
 
     <div class="sticky-bottom">
       <button id="btnAutoAssignBottom" class="primary">自動割当（表示週）</button>
@@ -202,6 +218,15 @@ document.addEventListener('DOMContentLoaded',()=>{
     const m=/（(.+?)）\s*$/.exec(t); return m?m[1]:'';
   }
   function parseTitleUser(ev){ const m=/^(.*)（/.exec(ev.title||''); return m?m[1]:ev.title||''; }
+  const toFixed4=(x)=> (typeof x==='number' && isFinite(x)) ? x.toFixed(4) : '';
+
+  // 距離（Haversine, km）
+  function haversine(lat1,lng1,lat2,lng2){
+    const R=6371, toRad=(d)=> d*Math.PI/180;
+    const dlat=toRad(lat2-lat1), dlng=toRad(lng2-lng1);
+    const a=Math.sin(dlat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dlng/2)**2;
+    return 2*R*Math.asin(Math.sqrt(a));
+  }
 
   // ====== State ======
   let staff=[], users=[], patterns=[], shifts=[], events=[];
@@ -209,14 +234,17 @@ document.addEventListener('DOMContentLoaded',()=>{
   let viewMode='standard';
   let staffBoardDate = new Date();
 
+  // 事務所拠点（1つ想定）
+  let office = { id:'office-default', name:'', address:'', lat:'', lng:'' };
+
   // ====== DOM refs ======
   const el={
     staffName:document.getElementById('staffName'), staffType:document.getElementById('staffType'), addStaff:document.getElementById('addStaff'), staffList:document.getElementById('staffList'),
     userName:document.getElementById('userName'), userDuration:document.getElementById('userDuration'), addUser:document.getElementById('addUser'), userList:document.getElementById('userList'),
+    userAddress:document.getElementById('userAddress'),
     patternUser:document.getElementById('patternUser'), patternDays:document.getElementById('patternDays'), patternTime:document.getElementById('patternTime'), addPattern:document.getElementById('addPattern'), patternList:document.getElementById('patternList'),
     shiftStaff:document.getElementById('shiftStaff'), shiftDays:document.getElementById('shiftDays'), shiftStart:document.getElementById('shiftStart'), shiftEnd:document.getElementById('shiftEnd'), addShift:document.getElementById('addShift'), shiftList:document.getElementById('shiftList'),
     btnAutoAssignBottom:document.getElementById('btnAutoAssignBottom'), btnResetWeek:document.getElementById('btnResetWeek'),
-    btnExportExcel:document.getElementById('btnExportExcel'),
     calendarHost:document.getElementById('calendar'),
     btnPrintCurrentA4:document.getElementById('btnPrintCurrentA4'),
     btnToggleSidebar:document.getElementById('btnToggleSidebar'),
@@ -225,16 +253,22 @@ document.addEventListener('DOMContentLoaded',()=>{
     ngStaff:document.getElementById('ngStaff'), ngUsers:document.getElementById('ngUsers'), btnAddNG:document.getElementById('btnAddNG'),
     staffBoard:document.getElementById('staffBoard'), btnViewToggle:document.getElementById('btnViewToggle'),
     sbControls:document.getElementById('staffBoardControls'), sbPrev:document.getElementById('sbPrev'), sbNext:document.getElementById('sbNext'), sbDate:document.getElementById('sbDate'),
-    printView:document.getElementById('printView')
+    printView:document.getElementById('printView'),
+    officeName:document.getElementById('officeName'),
+    officeAddress:document.getElementById('officeAddress'),
+    btnSaveOffice:document.getElementById('btnSaveOffice'),
+    officeInfo:document.getElementById('officeInfo')
   };
 
   // ====== Storage ======
-  const save=()=>localStorage.setItem(STORAGE_KEY, JSON.stringify({staff,users,patterns,shifts,events}));
+  const save=()=>localStorage.setItem(STORAGE_KEY, JSON.stringify({staff,users,patterns,shifts,events,office}));
   const load=()=>{try{
     const raw=localStorage.getItem(STORAGE_KEY); if(!raw) return;
     const d=JSON.parse(raw);
     staff=(d.staff||[]).map(s=>({...s, ngUserIds: s.ngUserIds||[]}));
-    users=d.users||[]; patterns=d.patterns||[]; shifts=d.shifts||[];
+    users=(d.users||[]).map(u=>({...u}));
+    patterns=d.patterns||[]; shifts=d.shifts||[];
+    office = d.office || office;
     events=(d.events||[]).map(ev=>{
       const sname=parseTitleStaff(ev);
       return { id: ev.id || uid(), title: ev.title, start: ev.start, end: ev.end,
@@ -243,27 +277,57 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
   }catch(e){console.error('load failed',e)}};
 
+  // ====== 並び順（表示＆選択肢を常にソート） ======
+  const sortStaffForView=(arr)=>{
+    // FT(常勤) -> PT(非常勤) の順、同タイプ内で五十音（ロケール）順
+    return [...arr].sort((a,b)=>{
+      const typeOrder = (a.type==='FT'?0:1) - (b.type==='FT'?0:1);
+      if(typeOrder!==0) return typeOrder;
+      return a.name.localeCompare(b.name,'ja');
+    });
+  };
+  const sortUsersForView=(arr)=> [...arr].sort((a,b)=> a.name.localeCompare(b.name,'ja'));
+
   // ====== Render helpers ======
   const dayNamesJP=['月','火','水','木','金','土','日'];
   const renderWeekdayChecks=(c)=>{ c.innerHTML=''; dayNamesJP.forEach(d=>{ const w=document.createElement('label'); w.className='chip'; w.innerHTML=`<input type="checkbox" value="${d}"> ${d}`; c.appendChild(w); }); };
   const hydrateSelects=()=>{
-    el.patternUser.innerHTML=''; users.forEach(u=>{ const o=document.createElement('option'); o.value=u.id; o.textContent=u.name; el.patternUser.appendChild(o); });
-    el.shiftStaff.innerHTML=''; staff.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=s.name; el.shiftStaff.appendChild(o); });
-    el.ngStaff.innerHTML=''; staff.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=`${s.name}（${s.type==='PT'?'非常勤':'常勤'}）`; el.ngStaff.appendChild(o); });
-    el.ngUsers.innerHTML=''; users.forEach(u=>{ const lab=document.createElement('label'); lab.className='chip'; lab.innerHTML=`<input type="checkbox" value="${u.id}"> ${u.name}`; el.ngUsers.appendChild(lab); });
+    // 並び順反映
+    const su = sortUsersForView(users);
+    const ss = sortStaffForView(staff);
+    el.patternUser.innerHTML=''; su.forEach(u=>{ const o=document.createElement('option'); o.value=u.id; o.textContent=u.name; el.patternUser.appendChild(o); });
+    el.shiftStaff.innerHTML=''; ss.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=s.name; el.shiftStaff.appendChild(o); });
+    el.ngStaff.innerHTML=''; ss.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=`${s.name}（${s.type==='PT'?'非常勤':'常勤'}）`; el.ngStaff.appendChild(o); });
+    el.ngUsers.innerHTML=''; su.forEach(u=>{ const lab=document.createElement('label'); lab.className='chip'; const coords=(u.lat&&u.lng)?`（${toFixed4(u.lat)}, ${toFixed4(u.lng)}）`:''; lab.innerHTML=`<input type="checkbox" value="${u.id}"> ${u.name}${coords}`; el.ngUsers.appendChild(lab); });
   };
   const renderStaff=()=>{
     el.staffList.innerHTML='';
-    staff.forEach(s=>{
+    sortStaffForView(staff).forEach(s=>{
       const ngNames=(s.ngUserIds||[]).map(id=>users.find(u=>u.id===id)?.name).filter(Boolean);
       const ngText=ngNames.length? `｜NG: ${ngNames.join('・')}` : '';
-      el.staffList.innerHTML+=`<span class='chip'>${s.name}（${s.type==='PT'?'非常勤':'常勤'}） ${ngText} <button class='delStaff' data-id='${s.id}'>削除</button></span>`;
+      el.staffList.innerHTML+=`<span class='chip'>${s.name}（${s.type==='PT'?'非常勤':'常勤'}） ${ngText} <button class='delete delStaff' data-id='${s.id}'>削除</button></span>`;
     });
   };
-  const renderUsers=()=>{ el.userList.innerHTML=''; users.forEach(u=>{ el.userList.innerHTML+=`<span class='chip'>${u.name}（${u.duration}分） <button class='delUser' data-id='${u.id}'>削除</button></span>`; }); };
-  const renderPatterns=()=>{ el.patternList.innerHTML=''; patterns.forEach(p=>{ const u=users.find(x=>x.id===p.userId); el.patternList.innerHTML+=`<span class='chip'>${u?u.name:'不明'}：${(p.days||[]).join('・')} ${p.time||''} <button class='delPattern' data-id='${p.id}'>削除</button></span>`; }); };
-  const renderShifts=()=>{ el.shiftList.innerHTML=''; shifts.forEach(s=>{ const stf=staff.find(x=>x.id===s.staffId); el.shiftList.innerHTML+=`<span class='chip'>${stf?stf.name:'不明'}：${s.days.join('・')} ${s.start}〜${s.end} <button class='delShift' data-id='${s.id}'>削除</button></span>`; }); };
-  const renderAll=()=>{ hydrateSelects(); renderStaff(); renderUsers(); renderPatterns(); renderShifts(); };
+  const renderUsers=()=>{
+    el.userList.innerHTML='';
+    sortUsersForView(users).forEach(u=>{
+      const addr = u.address ? `｜${u.address}` : '';
+      const coords = (u.lat && u.lng) ? `（${toFixed4(u.lat)}, ${toFixed4(u.lng)}）` : '';
+      el.userList.innerHTML += `<span class='chip'>${u.name}（${u.duration}分）${addr}${coords}
+        <button class='edit editUser' data-id='${u.id}'>編集</button>
+        <button class='delete delUser' data-id='${u.id}'>削除</button>
+      </span>`;
+    });
+  };
+  const renderPatterns=()=>{ el.patternList.innerHTML=''; patterns.forEach(p=>{ const u=users.find(x=>x.id===p.userId); el.patternList.innerHTML+=`<span class='chip'>${u?u.name:'不明'}：${(p.days||[]).join('・')} ${p.time||''} <button class='delete delPattern' data-id='${p.id}'>削除</button></span>`; }); };
+  const renderShifts=()=>{ el.shiftList.innerHTML=''; shifts.forEach(s=>{ const stf=staff.find(x=>x.id===s.staffId); el.shiftList.innerHTML+=`<span class='chip'>${stf?stf.name:'不明'}：${s.days.join('・')} ${s.start}〜${s.end} <button class='delete delShift' data-id='${s.id}'>削除</button></span>`; }); };
+  const renderOffice=()=>{
+    const name = office?.name||'', addr = office?.address||'';
+    const coords = (typeof office.lat==='number' && typeof office.lng==='number') ? `（${toFixed4(office.lat)}, ${toFixed4(office.lng)}）` : '';
+    el.officeInfo.textContent = name||addr||coords ? `拠点：${name}｜${addr} ${coords}` : '拠点未登録';
+    el.officeName.value = name; el.officeAddress.value = addr;
+  };
+  const renderAll=()=>{ hydrateSelects(); renderStaff(); renderUsers(); renderPatterns(); renderShifts(); renderOffice(); };
 
   // ====== 標準カレンダー ======
   const calendar=new FullCalendar.Calendar(el.calendarHost,{
@@ -343,11 +407,11 @@ document.addEventListener('DOMContentLoaded',()=>{
       <div class="row" style="margin-top:6px">
         <div style="flex:1">
           <label>スタッフ</label>
-          <select id="pvStaff">${[...new Set(staff.map(s=>s.name))].map(n=>`<option ${n===staffName?'selected':''}>${n}</option>`).join('')}</select>
+          <select id="pvStaff">${[...new Set(sortStaffForView(staff).map(s=>s.name))].map(n=>`<option ${n===staffName?'selected':''}>${n}</option>`).join('')}</select>
         </div>
         <div style="flex:1">
           <label>利用者</label>
-          <select id="pvUser">${[...new Set(users.map(u=>u.name))].map(n=>`<option ${n===user?'selected':''}>${n}</option>`).join('')}</select>
+          <select id="pvUser">${[...new Set(sortUsersForView(users).map(u=>u.name))].map(n=>`<option ${n===user?'selected':''}>${n}</option>`).join('')}</select>
         </div>
       </div>
       <div class="actions">
@@ -382,7 +446,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     };
   }
 
-  // ====== 自動割当 ======
+  // ====== 自動割当（距離コスト反映版） ======
   function countAssignedForWeek(staffName, monday, nextMonday){
     let c=0;
     (events||[]).forEach(ev=>{
@@ -391,6 +455,40 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
     return c;
   }
+
+  // 指定スタッフの「その日」の直前イベント（開始前に終わっている最後のイベント）を取得
+  function findPrevEventForStaff(staffName, day, startISO){
+    const sTime=new Date(startISO);
+    const evs=(events||[]).filter(ev=> parseTitleStaff(ev)===staffName && fmtDateLocal(new Date(ev.start))===fmtDateLocal(day));
+    const prev=evs.filter(ev=> new Date(ev.end||ev.start) <= sTime)
+                  .sort((a,b)=> new Date(b.end||b.start) - new Date(a.end||a.start))[0];
+    return prev||null;
+  }
+  function userLatLngByName(userName){
+    const u = users.find(x=>x.name===userName);
+    if(u && typeof u.lat==='number' && typeof u.lng==='number') return {lat:u.lat, lng:u.lng};
+    return null;
+    }
+  function eventLatLng(ev){
+    const uname = parseTitleUser(ev);
+    return userLatLngByName(uname);
+  }
+
+  function distanceCostFor(staffName, day, startISO, userLL){
+    if(!userLL) return Infinity;
+    // 直前イベント → ユーザー
+    const prev = findPrevEventForStaff(staffName, day, startISO);
+    if(prev){
+      const pll = eventLatLng(prev);
+      if(pll) return haversine(pll.lat, pll.lng, userLL.lat, userLL.lng);
+    }
+    // 直前がなければ拠点 → ユーザー
+    if(typeof office.lat==='number' && typeof office.lng==='number'){
+      return haversine(office.lat, office.lng, userLL.lat, userLL.lng);
+    }
+    return Infinity;
+  }
+
   function autoAssignWeek(){
     if(staff.length===0){ alert('スタッフを登録してください'); return; }
     if(users.length===0){ alert('利用者を登録してください'); return; }
@@ -408,8 +506,8 @@ document.addEventListener('DOMContentLoaded',()=>{
       const sh = shifts.filter(x=>x.staffId===stfId && x.days.includes(dayLabel));
       return sh.some(x=> x.start<=startStr && x.end>=endStr );
     };
-    const dayNamesJP=['月','火','水','木','金','土','日'];
     const weekdayLabel=(date)=>{ const idx=(date.getDay()+6)%7; return dayNamesJP[idx]; };
+    const within=(s1,e1,s2,e2)=> !(e1<=s2 || e2<=s1); // かぶり判定
 
     let placed=0;
 
@@ -425,28 +523,43 @@ document.addEventListener('DOMContentLoaded',()=>{
         const endISO   = `${fmtDateLocal(day)}T${en}:00`;
         const dayLabel = weekdayLabel(day);
 
-        const candidates = staff.filter(s=> hasShiftLocal(s.id,dayLabel,st,en));
-        const pt = candidates.filter(c=> c.type==='PT' && !(c.ngUserIds||[]).includes(u.id));
-        const ft = candidates.filter(c=> c.type==='FT' && !(c.ngUserIds||[]).includes(u.id));
+        // 勤務帯とNGで絞り込み
+        const candidates = sortStaffForView(staff).filter(s=> hasShiftLocal(s.id,dayLabel,st,en) && !(s.ngUserIds||[]).includes(u.id));
 
-        const placeable=(cand)=>{
-          const sn=cand.name; const ns=new Date(startISO), ne=new Date(endISO);
-          const clash = (events||[]).some(ev=>{
-            const name=parseTitleStaff(ev);
-            if(name!==sn) return false;
-            const s=new Date(ev.start), e=new Date(ev.end||ev.start);
-            return !(e<=ns || s>=ne);
+        // 時間重複がないか／距離コスト
+        const uLL = (typeof u.lat==='number' && typeof u.lng==='number') ? {lat:u.lat,lng:u.lng} : null;
+        const feasible = candidates.filter(c=>{
+          // その日のそのスタッフのイベントと時間重複しないか
+          const list=(events||[]).filter(ev=>{
+            const sname=parseTitleStaff(ev);
+            return sname===c.name && fmtDateLocal(new Date(ev.start))===fmtDateLocal(day);
           });
-          return !clash;
-        };
+          const ns=new Date(startISO), ne=new Date(endISO);
+          return !list.some(ev=> within(new Date(ev.start), new Date(ev.end||ev.start), ns, ne));
+        });
 
         let picked=null;
-        for(const cand of pt){ if(placeable(cand)){ picked=cand; break; } }
-        if(!picked && ft.length){
-          const withCount = ft.map(c=>({c, cnt: countAssignedForWeek(c.name,monday,nextMonday)}))
-                              .sort((a,b)=> a.cnt-b.cnt || a.c.name.localeCompare(b.c.name,'ja'));
-          for(const item of withCount){ if(placeable(item.c)){ picked=item.c; break; } }
+
+        if(uLL){
+          // 距離最小の候補
+          const scored = feasible.map(c=> ({ c, dist: distanceCostFor(c.name, day, startISO, uLL) }));
+          scored.sort((a,b)=> (a.dist-b.dist) || a.c.name.localeCompare(b.c.name,'ja'));
+          // Infinity（座標不足）ばかりなら次の後段にフォールバック
+          const firstFinite = scored.find(x=> isFinite(x.dist));
+          if(firstFinite) picked = firstFinite.c;
         }
+
+        // 座標が無いなどで距離選択できない場合は従来のPT優先→FT公平化
+        if(!picked && feasible.length){
+          const pt = feasible.filter(c=> c.type==='PT');
+          if(pt.length) picked = pt[0];
+          else{
+            const withCount = feasible.map(c=>({c, cnt: countAssignedForWeek(c.name,monday,nextMonday)}))
+                                      .sort((a,b)=> a.cnt-b.cnt || a.c.name.localeCompare(b.c.name,'ja'));
+            picked = withCount[0]?.c || null;
+          }
+        }
+
         if (!picked) {
           skippedAssignments.push({reason:'割当不可（NG/重複/不在）', userId:u.id, date:fmtDateLocal(day), start:st, end:en});
           continue;
@@ -472,25 +585,16 @@ document.addEventListener('DOMContentLoaded',()=>{
     if(!skippedAssignments.length) return;
     const overlay=document.createElement('div'); overlay.className='overlay';
     const box=document.createElement('div'); box.className='modal'; box.style.minWidth='600px';
-    const dayNamesJP=['月','火','水','木','金','土','日'];
     const rows = skippedAssignments.map((s,idx)=>{
       const uname = users.find(u=>u.id===s.userId)?.name || '(不明)';
       const date = s.date||'(日付)'; const st = s.start||'09:00'; const en = s.end||'10:00';
-      const d=new Date(`${s.date||fmtDateLocal(new Date())}T00:00:00`);
-      const dayLabel = dayNamesJP[(d.getDay()+6)%7];
-      const cands = staff.filter(sf=>{
-        const okShift = shifts.some(sh=> sh.staffId===sf.id && sh.days.includes(dayLabel) && sh.start<=st && sh.end>=en);
-        const okNG = !(sf.ngUserIds||[]).includes(s.userId);
-        return okShift && okNG;
-      });
-      const opts = cands.map(c=>`<option value="${c.id}">${c.name}（${c.type==='FT'?'常勤':'非常勤'}）</option>`).join('');
       return `
         <tr data-idx="${idx}">
           <td>${date}</td>
           <td><input type="time" class="sk-st" value="${st}"></td>
           <td><input type="time" class="sk-en" value="${en}"></td>
           <td>${uname}</td>
-          <td><select class="sk-staff"><option value="">選択</option>${opts}</select></td>
+          <td><select class="sk-staff"><option value="">選択</option>${sortStaffForView(staff).map(c=>`<option value="${c.id}">${c.name}（${c.type==='FT'?'常勤':'非常勤'}）</option>`).join('')}</select></td>
           <td>${s.reason||''}</td>
           <td><button class="btn primary sk-place">配置</button></td>
         </tr>
@@ -537,46 +641,32 @@ document.addEventListener('DOMContentLoaded',()=>{
   // ====== スタッフ別ボード（＋日付選択） ======
   let staffCalendars=[];
   function renderStaffBoard(){
-    // 既存破棄
     staffCalendars.forEach(sc=> sc.cal.destroy());
     staffCalendars=[];
     el.staffBoard.innerHTML='';
 
-    // 表示する日のローカル 00:00〜24:00 を厳密に指定（UTCズレ対策）
-    const startDay = new Date(staffBoardDate); startDay.setHours(0,0,0,0);
+    const startDay = new Date(staffBoardDate);
+    startDay.setHours(0,0,0,0);
     const endDay = new Date(startDay); endDay.setDate(endDay.getDate()+1);
 
-    staff.forEach(s=>{
+    sortStaffForView(staff).forEach(s=>{
       const col=document.createElement('div'); col.className='col';
       col.innerHTML=`<h4>${s.name}（${s.type==='PT'?'非常勤':'常勤'}）</h4><div class="calHost"></div>`;
       el.staffBoard.appendChild(col);
       const host=col.querySelector('.calHost');
 
       const cal=new FullCalendar.Calendar(host,{
-        timeZone:'local',
-        headerToolbar:false,
-        initialView:'timeGridDay',
-
-        /* ★重要：この日のみを表示するよう固定 */
-        initialDate:startDay,
-        visibleRange:{ start:startDay, end:endDay },
-
-        firstDay:1, locale:'ja', height:600,
-        slotMinTime:'09:00', slotMaxTime:'18:00',
+        timeZone:'local', headerToolbar:false, initialView:'timeGridDay',
+        initialDate:startDay, visibleRange:{ start:startDay, end:endDay },
+        firstDay:1, locale:'ja', height:600, slotMinTime:'09:00', slotMaxTime:'18:00',
         expandRows:true, nowIndicator:true, allDaySlot:false,
-
+        dayHeaderFormat:{ weekday:'short', month:'numeric', day:'numeric' },
         events:(info,success)=>{
-          const list=(events||[])
-            .filter(e=>{
-              const sn=parseTitleStaff(e);
-              const d=new Date(e.start);
-              return sn===s.name && d>=startDay && d<endDay;
-            })
-            .map(e=>({
-              id:e.id, title:e.title, start:e.start, end:e.end,
-              extendedProps:{...(e.extendedProps||{})},
-              backgroundColor:e.backgroundColor, borderColor:e.borderColor
-            }));
+          const list=(events||[]).filter(e=>{
+            const sn=parseTitleStaff(e);
+            const d=new Date(e.start);
+            return sn===s.name && d>=startDay && d<endDay;
+          }).map(e=>({...e}));
           success(list);
         },
         eventDidMount:(info)=>{
@@ -615,7 +705,6 @@ document.addEventListener('DOMContentLoaded',()=>{
   function buildPrintHTML(){
     el.printView.innerHTML='';
     if(viewMode==='standard'){
-      // 標準：時間順のみ
       const isWeek = /Week/i.test(calendar.view.type);
       const baseDate = calendar.getDate();
       const days=[];
@@ -649,7 +738,6 @@ document.addEventListener('DOMContentLoaded',()=>{
       });
       el.printView.innerHTML = html;
     }else{
-      // スタッフ別：その日分のスタッフ順のみ
       const dayStr = fmtDateLocal(new Date(staffBoardDate));
       const byStaff = {};
       (events||[]).forEach(ev=>{
@@ -678,21 +766,6 @@ document.addEventListener('DOMContentLoaded',()=>{
     const {monday,nextMonday}=getWeekRange(calendar.getDate());
     calendar.getEvents().forEach(ev=>{ if(ev.start>=monday && ev.start<nextMonday) ev.remove(); });
     persistEvents(); if(viewMode==='staffBoard') renderStaffBoard();
-  };
-  el.btnExportExcel.onclick=()=>{
-    const {monday,nextMonday}=getWeekRange(calendar.getDate());
-    const rows=[["日付","曜日","開始","終了","利用者","スタッフ","分数"]];
-    calendar.getEvents().forEach(ev=>{
-      if(!(ev.start>=monday && ev.start<nextMonday)) return;
-      const user=parseTitleUser(ev); const stf=parseTitleStaff(ev);
-      const s=ev.start, e=ev.end|| new Date(s.getTime()+30*60000);
-      rows.push([fmtDateLocal(s),jp[s.getDay()],s.toTimeString().slice(0,5),e.toTimeString().slice(0,5),user,stf, Math.round((e-s)/60000)]);
-    });
-    const csv=rows.map(r=>r.map(x=>`"${String(x).replaceAll('"','""')}"`).join(',')).join('\n');
-    const blob=new Blob(["\ufeff"+csv],{type:'text/csv;charset=utf-8;'});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-    const wk=fmtDateLocal(getWeekRange(calendar.getDate()).monday);
-    a.download=`訪問看護_週次_${wk}.csv`; a.click(); URL.revokeObjectURL(a.href);
   };
   el.btnPrintCurrentA4.addEventListener('click', printCurrentView);
   el.btnAutoAssignBottom.addEventListener('click',autoAssignWeek);
@@ -738,17 +811,120 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   el.btnViewToggle.addEventListener('click', ()=>{ switchViewMode(viewMode==='standard'?'staffBoard':'standard'); });
 
+  // ====== 利用者の登録（住所→座標） ======
+  el.addUser?.addEventListener('click', async ()=>{
+    const name = el.userName.value.trim();
+    if(!name) return alert('利用者名を入力してください');
+    const duration = parseInt(el.userDuration.value)||30;
+    const address = el.userAddress.value.trim();
+    let lat = '', lng = '';
+
+    if(address){
+      try{
+        const q = encodeURIComponent(address);
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=1&addressdetails=0`;
+        const res = await fetch(url, { headers: { 'Accept-Language':'ja' }});
+        const data = await res.json();
+        if(data && data[0]){
+          lat = parseFloat(data[0].lat);
+          lng = parseFloat(data[0].lon);
+        }
+      }catch(err){ console.error('Nominatim検索エラー', err); }
+    }
+
+    users.push({id:uid(),name,duration,address,lat,lng});
+    el.userName.value=''; el.userAddress.value='';
+    save(); renderAll(); if(viewMode==='staffBoard') renderStaffBoard();
+  });
+
+  // ====== 利用者 編集モーダル ======
+  function openUserEditor(userId){
+    const u = users.find(x=>x.id===userId); if(!u) return;
+    const overlay=document.createElement('div'); overlay.className='overlay';
+    const box=document.createElement('div'); box.className='modal';
+    box.innerHTML=`
+      <h3>利用者編集</h3>
+      <label>氏名</label>
+      <input id="euName" value="${u.name||''}">
+      <div class="row">
+        <div style="flex:1">
+          <label>所要時間（分）</label>
+          <select id="euDur">
+            <option value="30" ${u.duration===30?'selected':''}>30</option>
+            <option value="60" ${u.duration===60?'selected':''}>60</option>
+          </select>
+        </div>
+        <div style="flex:1"></div>
+      </div>
+      <label>住所（空でも可）</label>
+      <input id="euAddr" value="${u.address||''}" placeholder="住所を入力すると座標を付与します">
+      <div class="muted" style="margin:6px 0">現在の座標：${(u.lat&&u.lng)?`${toFixed4(u.lat)}, ${toFixed4(u.lng)}`:'未取得'}</div>
+      <div class="actions">
+        <button id="euSave" class="btn primary">保存</button>
+        <button id="euClose" class="btn ghost">閉じる</button>
+      </div>
+    `;
+    document.body.appendChild(overlay); document.body.appendChild(box);
+    const close=()=>{ overlay.remove(); box.remove(); };
+    document.getElementById('euClose').onclick=close; overlay.onclick=close;
+    document.getElementById('euSave').onclick=async ()=>{
+      const name = document.getElementById('euName').value.trim()||u.name;
+      const duration = parseInt(document.getElementById('euDur').value)||u.duration;
+      const address = document.getElementById('euAddr').value.trim();
+      let lat = u.lat, lng = u.lng;
+
+      if(address && address!==u.address){
+        try{
+          const q = encodeURIComponent(address);
+          const url = `https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=1&addressdetails=0`;
+          const res = await fetch(url, { headers: { 'Accept-Language':'ja' }});
+          const data = await res.json();
+          if(data && data[0]){
+            lat = parseFloat(data[0].lat);
+            lng = parseFloat(data[0].lon);
+          }else{
+            alert('住所から座標を取得できませんでした（保存は続行します）');
+          }
+        }catch(err){ console.error(err); alert('座標取得中にエラーが発生しました（保存は続行します）'); }
+      }
+
+      u.name=name; u.duration=duration; u.address=address; u.lat=lat; u.lng=lng;
+      save(); renderAll(); close();
+    };
+  }
+
+  // ====== 拠点の住所→座標 保存 ======
+  el.btnSaveOffice?.addEventListener('click', async ()=>{
+    const name = el.officeName.value.trim();
+    const address = el.officeAddress.value.trim();
+    let lat = office.lat, lng = office.lng;
+
+    if(address){
+      try{
+        const q = encodeURIComponent(address);
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=1&addressdetails=0`;
+        const res = await fetch(url, { headers: { 'Accept-Language':'ja' }});
+        const data = await res.json();
+        if(data && data[0]){
+          lat = parseFloat(data[0].lat);
+          lng = parseFloat(data[0].lon);
+        }else{
+          alert('住所から座標を取得できませんでした（後で再試行可）');
+        }
+      }catch(err){ console.error(err); alert('座標取得中にエラーが発生しました'); }
+    }
+
+    office = { id:'office-default', name, address, lat, lng };
+    save(); renderOffice();
+    alert('拠点を保存しました');
+  });
+
   // ====== データ変更系 ======
   el.addStaff?.addEventListener('click',()=>{
     const name=el.staffName.value.trim(); if(!name) return alert('スタッフ名を入力');
     const type=el.staffType.value;
     staff.push({id:uid(),name,type,ngUserIds:[]});
     el.staffName.value=''; save(); renderAll(); calendar.refetchEvents(); if(viewMode==='staffBoard') renderStaffBoard();
-  });
-  el.addUser?.addEventListener('click',()=>{
-    const name=el.userName.value.trim(); if(!name) return alert('利用者名を入力');
-    const duration=parseInt(el.userDuration.value)||30;
-    users.push({id:uid(),name,duration}); el.userName.value=''; save(); renderAll(); if(viewMode==='staffBoard') renderStaffBoard();
   });
   el.addPattern?.addEventListener('click',()=>{
     const userId=el.patternUser.value; const time=el.patternTime.value;
@@ -772,7 +948,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     alert('NGを追加しました');
   });
 
-  // 削除（委譲）
+  // 削除・編集（委譲）
   document.body.addEventListener('click',(e)=>{
     const t=e.target; if(!(t instanceof HTMLElement)) return;
     if(t.classList.contains('delStaff')){
@@ -788,6 +964,9 @@ document.addEventListener('DOMContentLoaded',()=>{
       events=events.filter(ev=> !uname || !ev.title?.startsWith(`${uname}（`));
       staff = staff.map(s=>({...s, ngUserIds:(s.ngUserIds||[]).filter(x=>x!==id)}));
       save(); renderAll(); calendar.refetchEvents(); if(viewMode==='staffBoard') renderStaffBoard();
+    }
+    if(t.classList.contains('editUser')){
+      const id=t.dataset.id; openUserEditor(id);
     }
     if(t.classList.contains('delPattern')){ const id=t.dataset.id; patterns=patterns.filter(p=>p.id!==id); save(); renderPatterns(); }
     if(t.classList.contains('delShift')){ const id=t.dataset.id; shifts=shifts.filter(p=>p.id!==id); save(); renderShifts(); }
