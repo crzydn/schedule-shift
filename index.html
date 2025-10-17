@@ -169,7 +169,7 @@
     <label>スタッフ</label><select id="ngStaff"></select>
     <label>NGにする利用者（複数選択可）</label>
     <div id="ngUsers" class="row" style="max-height:140px; overflow:auto; border:1px dashed var(--line); padding:8px; border-radius:10px"></div>
-    <div class="row"><button id="btnAddNG">NG追加</button></div>
+    <div class="row"><button id="btnAddNG">NG保存</button></div>
 
     <div class="sticky-bottom">
       <button id="btnAutoAssignBottom" class="primary">自動割当（表示週）</button>
@@ -211,9 +211,9 @@ document.addEventListener('DOMContentLoaded',()=>{
     const m=/（(.+?)）\s*$/.exec(t); return m?m[1]:'';
   }
   function parseTitleUser(ev){ const m=/^(.*)（/.exec(ev.title||''); return m?m[1]:ev.title||''; }
-  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
 
-  // 日本住所 正規化
+  // ====== Geo helpers ======
+  const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
   function toHalfWidthNum(str){return (str||'').replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0)-0xFEE0));}
   function normalizeHyphen(str){return (str||'').replace(/[ー−–—‐-﹣－]/g, '-');}
   function normalizeJPAddress(raw){
@@ -248,7 +248,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         const lat = Number(data[0].lat), lng = Number(data[0].lon);
         if(Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
       }
-    }catch(e){ console.warn('nominatim error', e); }
+    }catch(e){}
     return null;
   }
   async function geocodeGSI(q){
@@ -264,7 +264,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         const lng = Number(coords[0]), lat = Number(coords[1]);
         if(Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
       }
-    }catch(e){ console.warn('gsi error', e); }
+    }catch(e){}
     return null;
   }
   function cityOnlyVariant(address){
@@ -340,26 +340,27 @@ document.addEventListener('DOMContentLoaded',()=>{
   }catch(e){console.error('load failed',e)}};
 
   // ====== Render helpers ======
+  const sortByName = (a,b)=> (a.name||'').localeCompare(b.name||'','ja');
+
   const hydrateSelects=()=>{
-    // 並び順：スタッフ＝常勤→非常勤の中で名前昇順
-    const staffSorted=[...staff].sort((a,b)=>{
-      if(a.type!==b.type) return a.type==='FT'?-1:1;
-      return (a.name||'').localeCompare(b.name||'','ja');
-    });
+    const staffSorted=[...staff].sort(sortByName);
     el.shiftStaff.innerHTML=''; staffSorted.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=s.name; el.shiftStaff.appendChild(o); });
     el.ngStaff.innerHTML=''; staffSorted.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=`${s.name}（${s.type==='PT'?'非常勤':'常勤'}）`; el.ngStaff.appendChild(o); });
 
-    // 利用者：名前昇順
-    const usersSorted=[...users].sort((a,b)=> (a.name||'').localeCompare(b.name||'','ja'));
+    const usersSorted=[...users].sort(sortByName);
     el.patternUser.innerHTML=''; usersSorted.forEach(u=>{ const o=document.createElement('option'); o.value=u.id; o.textContent=u.name; el.patternUser.appendChild(o); });
 
-    el.ngUsers.innerHTML=''; usersSorted.forEach(u=>{ const lab=document.createElement('label'); lab.className='chip'; lab.innerHTML=`<input type="checkbox" value="${u.id}"> ${u.name}`; el.ngUsers.appendChild(lab); });
-  };
-  const renderStaff=()=>{
-    const staffSorted=[...staff].sort((a,b)=>{
-      if(a.type!==b.type) return a.type==='FT'?-1:1;
-      return (a.name||'').localeCompare(b.name||'','ja');
+    // NG 候補一覧（チェック付与は ngStaff 変更時）
+    el.ngUsers.innerHTML='';
+    usersSorted.forEach(u=>{
+      const lab=document.createElement('label'); lab.className='chip';
+      lab.innerHTML=`<input type="checkbox" value="${u.id}"> ${u.name}`;
+      el.ngUsers.appendChild(lab);
     });
+  };
+
+  const renderStaff=()=>{
+    const staffSorted=[...staff].sort(sortByName);
     el.staffList.innerHTML='';
     staffSorted.forEach(s=>{
       const ngNames=(s.ngUserIds||[]).map(id=>users.find(u=>u.id===id)?.name).filter(Boolean);
@@ -367,12 +368,14 @@ document.addEventListener('DOMContentLoaded',()=>{
       el.staffList.innerHTML+=`
         <span class='chip'>
           ${s.name}（${s.type==='PT'?'非常勤':'常勤'}） ${ngText}
+          <button class='ghost editStaff' data-id='${s.id}'>編集</button>
           <button class='delStaff' data-id='${s.id}'>削除</button>
         </span>`;
     });
   };
+
   const renderUsers=()=>{
-    const usersSorted=[...users].sort((a,b)=> (a.name||'').localeCompare(b.name||'','ja'));
+    const usersSorted=[...users].sort(sortByName);
     el.userList.innerHTML='';
     usersSorted.forEach(u=>{
       const addr=u.address||'(住所なし)';
@@ -385,14 +388,58 @@ document.addEventListener('DOMContentLoaded',()=>{
         </span>`;
     });
   };
-  const renderPatterns=()=>{ el.patternList.innerHTML=''; patterns.forEach(p=>{ const u=users.find(x=>x.id===p.userId); el.patternList.innerHTML+=`<span class='chip'>${u?u.name:'不明'}：${(p.days||[]).join('・')} ${p.time||''} <button class='delPattern' data-id='${p.id}'>削除</button></span>`; }); };
-  const renderShifts=()=>{ el.shiftList.innerHTML=''; shifts.forEach(s=>{ const stf=staff.find(x=>x.id===s.staffId); el.shiftList.innerHTML+=`<span class='chip'>${stf?stf.name:'不明'}：${s.days.join('・')} ${s.start}〜${s.end} <button class='delShift' data-id='${s.id}'>削除</button></span>`; }); };
+
+  const renderPatterns=()=>{
+    el.patternList.innerHTML='';
+    const usersMap = new Map(users.map(u=>[u.id,u]));
+    patterns.forEach(p=>{
+      const u=usersMap.get(p.userId);
+      el.patternList.innerHTML += `
+        <span class='chip'>
+          ${u?u.name:'不明'}：${(p.days||[]).join('・')} ${p.time||''}
+          <button class='ghost editPattern' data-id='${p.id}'>編集</button>
+          <button class='delPattern' data-id='${p.id}'>削除</button>
+        </span>`;
+    });
+  };
+
+  const renderShifts=()=>{ el.shiftList.innerHTML=''; shifts.forEach(s=>{ const stf=staff.find(x=>x.id===s.staffId); el.shiftList.innerHTML=`${el.shiftList.innerHTML}<span class='chip'>${stf?stf.name:'不明'}：${s.days.join('・')} ${s.start}〜${s.end} <button class='delShift' data-id='${s.id}'>削除</button></span>`; }); };
   const renderOffice=()=>{
     el.officeAddress.value = office.address||'';
     const txt = (Number.isFinite(office.lat)&&Number.isFinite(office.lng)) ? `座標：${office.lat.toFixed(5)}, ${office.lng.toFixed(5)}` : '座標未取得';
     el.officeInfo.textContent = office.address ? `${office.address} ｜ ${txt}` : '未設定';
   }
-  const renderAll=()=>{ hydrateSelects(); renderStaff(); renderUsers(); renderPatterns(); renderShifts(); renderOffice(); };
+  const renderAll=()=>{ hydrateSelects(); renderStaff(); renderUsers(); renderPatterns(); renderShifts(); renderOffice(); refreshNGChecksForSelectedStaff(); };
+
+  // ====== 距離計算（ハバースィン） ======
+  function haversineKm(a, b){
+    if(!a||!b||!Number.isFinite(a.lat)||!Number.isFinite(a.lng)||!Number.isFinite(b.lat)||!Number.isFinite(b.lng)) return Number.POSITIVE_INFINITY;
+    const toRad = d=>d*Math.PI/180;
+    const R = 6371;
+    const dLat = toRad(b.lat-a.lat), dLng = toRad(b.lng-a.lng);
+    const s = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
+    return 2*R*Math.asin(Math.sqrt(s));
+  }
+  function getUserGeoByName(name){
+    const u = users.find(x=>x.name===name);
+    if(u && Number.isFinite(u.lat) && Number.isFinite(u.lng)) return {lat:u.lat, lng:u.lng};
+    return null;
+  }
+  function officeGeo(){ return (Number.isFinite(office.lat)&&Number.isFinite(office.lng))? {lat:office.lat,lng:office.lng} : null; }
+  function lastEventBefore(staffName, dayISO, startISO){
+    const sDay = new Date(dayISO+'T00:00:00');
+    const eDay = new Date(dayISO+'T23:59:59');
+    let last=null;
+    (events||[]).forEach(ev=>{
+      const sn=parseTitleStaff(ev);
+      if(sn!==staffName) return;
+      const s=new Date(ev.start), e=new Date(ev.end||ev.start);
+      if(s>=sDay && e<=eDay && e<=new Date(startISO)){
+        if(!last || e>new Date(last.end)) last=ev;
+      }
+    });
+    return last;
+  }
 
   // ====== 標準カレンダー ======
   const calendar=new FullCalendar.Calendar(el.calendarHost,{
@@ -415,17 +462,92 @@ document.addEventListener('DOMContentLoaded',()=>{
     },
     eventDrop:(info)=>{ snapAndPersist(info.event); },
     eventResize:(info)=>{ snapAndPersist(info.event); },
+
+    // === 訪問追加モーダル（安定化） ===
     dateClick:(info)=>{
-      const usr=prompt('利用者名'); if(!usr) return;
-      const stf=prompt('スタッフ名'); if(!stf) return;
-      const s=new Date(info.dateStr); const e=new Date(s.getTime()+60*60000);
-      const col=colorByStaffName(stf);
-      events.push({ id:uid(), title:`${usr}（${stf}）`, start:s.toISOString(), end:e.toISOString(),
-        extendedProps:{staffName:stf}, backgroundColor:col, borderColor:'var(--event-border)' });
-      save(); calendar.refetchEvents(); if(viewMode==='staffBoard') renderStaffBoard();
+      const start = new Date(info.dateStr);
+      const startStr = start.toTimeString().slice(0,5);
+      const overlay=document.createElement('div'); overlay.className='overlay';
+      const box=document.createElement('div'); box.className='modal';
+      const staffOptions = [...staff].sort(sortByName).map(s=>`<option value="${s.name}">${s.name}</option>`).join('');
+      const userOptions  = [...users].sort(sortByName).map(u=>`<option value="${u.name}">${u.name}</option>`).join('');
+      box.innerHTML = `
+        <h3>訪問イベント追加</h3>
+        <div class="row">
+          <div style="flex:1">
+            <label>開始</label>
+            <input id="evStart" type="time" value="${startStr}">
+          </div>
+          <div style="flex:1">
+            <label>時間（分）</label>
+            <select id="evDur"><option value="30">30</option><option value="60" selected>60</option><option value="90">90</option></select>
+          </div>
+        </div>
+        <div class="row">
+          <div style="flex:1">
+            <label>スタッフ（選択）</label>
+            <select id="evStaffSel"><option value="">未選択</option>${staffOptions}</select>
+          </div>
+          <div style="flex:1">
+            <label>スタッフ（手打ち）</label>
+            <input id="evStaffTxt" placeholder="例）佐藤">
+          </div>
+        </div>
+        <div class="row">
+          <div style="flex:1">
+            <label>利用者（選択）</label>
+            <select id="evUserSel"><option value="">未選択</option>${userOptions}</select>
+          </div>
+          <div style="flex:1">
+            <label>利用者（手打ち）</label>
+            <input id="evUserTxt" placeholder="例）田中">
+          </div>
+        </div>
+        <div class="actions">
+          <button id="evSave" class="btn primary">追加</button>
+          <button id="evClose" class="btn ghost">閉じる</button>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      document.body.appendChild(box);
+
+      // 外側クリックのみ閉じる（内部クリックでは閉じない）
+      overlay.addEventListener('click', (e)=>{ if(e.target===overlay) close(); });
+      function close(){ overlay.remove(); box.remove(); }
+      document.getElementById('evClose').onclick=close;
+
+      document.getElementById('evSave').onclick=()=>{
+        const st = document.getElementById('evStart').value || '09:00';
+        const dur = parseInt(document.getElementById('evDur').value)||60;
+
+        const staffSel = document.getElementById('evStaffSel').value.trim();
+        const staffTxt = document.getElementById('evStaffTxt').value.trim();
+        const userSel  = document.getElementById('evUserSel').value.trim();
+        const userTxt  = document.getElementById('evUserTxt').value.trim();
+
+        const staffName = staffTxt || staffSel;
+        const userName  = userTxt  || userSel;
+
+        if(!staffName || !userName){ alert('スタッフと利用者を入力または選択してください'); return; }
+
+        const day = fmtDateLocal(start);
+        const endStr = (function(hhmm,m){ const [h,mi]=hhmm.split(':').map(Number); const d=new Date(); d.setHours(h); d.setMinutes(mi+m); return d.toTimeString().slice(0,5);} )(st,dur);
+        const col=colorByStaffName(staffName);
+        events.push({
+          id: uid(),
+          title:`${userName}（${staffName}）`,
+          start:`${day}T${st}:00`,
+          end:`${day}T${endStr}:00`,
+          extendedProps:{staffName},
+          backgroundColor:col, borderColor:'var(--event-border)'
+        });
+        save(); calendar.refetchEvents(); close();
+      };
     },
+
     eventClick:(info)=>{ openEditorById(info.event.id); }
   });
+
   function snapAndPersist(ev){
     const s=ceilTo15(ev.start); const e=ceilTo15(ev.end);
     ev.setDates(s,e,{maintainDuration:false});
@@ -445,7 +567,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     save();
   }
 
-  // ==== 共通エディタ（idベースで編集／削除） ====
+  // ==== イベント編集 ====
   function openEditorById(eventId){
     const rec = events.find(e=>e.id===eventId);
     if(!rec) return;
@@ -466,17 +588,17 @@ document.addEventListener('DOMContentLoaded',()=>{
         </div>
         <div style="flex:1">
           <label>時間（分）</label>
-          <select id="pvDur"><option value="30" ${dur===30?'selected':''}>30</option><option value="60" ${dur===60?'selected':''}>60</option></select>
+          <select id="pvDur"><option value="30" ${dur===30?'selected':''}>30</option><option value="60" ${dur===60?'selected':''}>60</option><option value="90" ${dur===90?'selected':''}>90</option></select>
         </div>
       </div>
       <div class="row" style="margin-top:6px">
         <div style="flex:1">
           <label>スタッフ</label>
-          <select id="pvStaff">${[...new Set(staff.map(s=>s.name))].map(n=>`<option ${n===staffName?'selected':''}>${n}</option>`).join('')}</select>
+          <select id="pvStaff">${[...new Set(staff.sort(sortByName).map(s=>s.name))].map(n=>`<option ${n===staffName?'selected':''}>${n}</option>`).join('')}</select>
         </div>
         <div style="flex:1">
           <label>利用者</label>
-          <select id="pvUser">${[...new Set(users.map(u=>u.name))].map(n=>`<option ${n===user?'selected':''}>${n}</option>`).join('')}</select>
+          <select id="pvUser">${[...new Set(users.sort(sortByName).map(u=>u.name))].map(n=>`<option ${n===user?'selected':''}>${n}</option>`).join('')}</select>
         </div>
       </div>
       <div class="actions">
@@ -485,8 +607,10 @@ document.addEventListener('DOMContentLoaded',()=>{
         <button id="pvClose" class="btn ghost">閉じる</button>
       </div>`;
     document.body.appendChild(overlay); document.body.appendChild(box);
-    const close=()=>{ overlay.remove(); box.remove(); };
-    document.getElementById('pvClose').onclick=close; overlay.onclick=close;
+    overlay.addEventListener('click',(e)=>{ if(e.target===overlay) close(); });
+    function close(){ overlay.remove(); box.remove(); }
+
+    document.getElementById('pvClose').onclick=close;
     document.getElementById('pvDelete').onclick=()=>{
       if(confirm('削除しますか？')){
         events = events.filter(e=>e.id!==eventId);
@@ -511,7 +635,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     };
   }
 
-  // ====== 自動割当（PT優先→FT均等化） ======
+  // ====== 自動割当（連続訪問を距離優先） ======
   function countAssignedForWeek(staffName, monday, nextMonday){
     let c=0;
     (events||[]).forEach(ev=>{
@@ -520,6 +644,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
     return c;
   }
+
   function autoAssignWeek(){
     if(staff.length===0){ alert('スタッフを登録してください'); return; }
     if(users.length===0){ alert('利用者を登録してください'); return; }
@@ -530,6 +655,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     const monday = rng.monday; const nextMonday = rng.nextMonday;
     const inWeek = (iso)=>{ const d=new Date(iso); return d>=monday && d<nextMonday; };
 
+    // 週の既存イベントはクリア
     events = (events||[]).filter(ev=> !inWeek(ev.start));
     skippedAssignments = [];
 
@@ -538,6 +664,26 @@ document.addEventListener('DOMContentLoaded',()=>{
       return sh.some(x=> x.start<=startStr && x.end>=endStr );
     };
     const weekdayLabel=(date)=>{ const idx=(date.getDay()+6)%7; return dayNamesJP[idx]; };
+
+    // 近接性優先でのスタッフソート関数
+    const sortByProximity = (candidates, dayISO, startStr, userGeo)=>{
+      // userGeo が無ければ並べ替えしない
+      if(!userGeo) return candidates;
+      // 直前イベント地点（なければ拠点）からの距離で昇順
+      const dayStartISO = `${dayISO}T00:00:00`;
+      const startISO = `${dayISO}T${startStr}:00`;
+      return [...candidates].sort((a,b)=>{
+        const prevA = lastEventBefore(a.name, dayISO, startISO);
+        const prevB = lastEventBefore(b.name, dayISO, startISO);
+        const geoA = prevA ? getUserGeoByName(parseTitleUser(prevA)) || officeGeo() : officeGeo();
+        const geoB = prevB ? getUserGeoByName(parseTitleUser(prevB)) || officeGeo() : officeGeo();
+        const da = haversineKm(geoA, userGeo);
+        const db = haversineKm(geoB, userGeo);
+        if(da!==db) return da-db;
+        // 同距離のときは名前で安定化
+        return a.name.localeCompare(b.name,'ja');
+      });
+    };
 
     let placed=0;
 
@@ -548,14 +694,19 @@ document.addEventListener('DOMContentLoaded',()=>{
       for(const d of (p.days||[])){
         const idx = dayNamesJP.indexOf(d); if(idx<0){ skippedAssignments.push({reason:'曜日不正', userId:u.id}); continue; }
         const day = new Date(monday); day.setDate(monday.getDate()+idx);
+        const dayISO = fmtDateLocal(day);
+
         const st = p.time; const en = addMinStr(st, u.duration);
-        const startISO = `${fmtDateLocal(day)}T${st}:00`;
-        const endISO   = `${fmtDateLocal(day)}T${en}:00`;
+        const startISO = `${dayISO}T${st}:00`;
+        const endISO   = `${dayISO}T${en}:00`;
         const dayLabel = weekdayLabel(day);
 
-        const candidates = staff.filter(s=> hasShiftLocal(s.id,dayLabel,st,en));
-        const pt = candidates.filter(c=> c.type==='PT' && !(c.ngUserIds||[]).includes(u.id));
-        const ft = candidates.filter(c=> c.type==='FT' && !(c.ngUserIds||[]).includes(u.id));
+        const candidatesAll = staff.filter(s=> hasShiftLocal(s.id,dayLabel,st,en)
+                                           && !(s.ngUserIds||[]).includes(u.id));
+
+        // 直前地点→今回ユーザーまでの距離を使って候補を並べ替え
+        const uGeo = (Number.isFinite(u.lat)&&Number.isFinite(u.lng)) ? {lat:u.lat,lng:u.lng} : null;
+        const candidates = sortByProximity(candidatesAll, dayISO, st, uGeo);
 
         const placeable=(cand)=>{
           const sn=cand.name; const ns=new Date(startISO), ne=new Date(endISO);
@@ -568,15 +719,12 @@ document.addEventListener('DOMContentLoaded',()=>{
           return !clash;
         };
 
+        // 候補を順にチェック（距離→重複なし）
         let picked=null;
-        for(const cand of pt){ if(placeable(cand)){ picked=cand; break; } }
-        if(!picked && ft.length){
-          const withCount = ft.map(c=>({c, cnt: countAssignedForWeek(c.name,monday,nextMonday)}))
-                              .sort((a,b)=> a.cnt-b.cnt || a.c.name.localeCompare(b.c.name,'ja'));
-          for(const item of withCount){ if(placeable(item.c)){ picked=item.c; break; } }
-        }
+        for(const cand of candidates){ if(placeable(cand)){ picked=cand; break; } }
+
         if (!picked) {
-          skippedAssignments.push({reason:'割当不可（NG/重複/不在）', userId:u.id, date:fmtDateLocal(day), start:st, end:en});
+          skippedAssignments.push({reason:'割当不可（NG/重複/不在）', userId:u.id, date:dayISO, start:st, end:en});
           continue;
         }
 
@@ -638,6 +786,9 @@ document.addEventListener('DOMContentLoaded',()=>{
       <div class="actions"><button id="skClose" class="btn ghost">閉じる</button></div>
     `;
     document.body.appendChild(overlay); document.body.appendChild(box);
+    overlay.addEventListener('click',(e)=>{ if(e.target===overlay) close(); });
+    function close(){ overlay.remove(); box.remove(); }
+
     box.addEventListener('click', (e)=>{
       const t=e.target; if(!(t instanceof HTMLElement)) return;
       if(t.classList.contains('sk-place')){
@@ -657,8 +808,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         save(); calendar.refetchEvents(); if(viewMode==='staffBoard') renderStaffBoard();
       }
     });
-    const close=()=>{ overlay.remove(); box.remove(); };
-    document.getElementById('skClose').onclick=close; overlay.onclick=close;
+    document.getElementById('skClose').onclick=close;
   }
 
   // ====== スタッフ別ボード（＋日付選択） ======
@@ -671,7 +821,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     const startDay=new Date(staffBoardDate); startDay.setHours(0,0,0,0);
     const endDay=new Date(startDay); endDay.setDate(endDay.getDate()+1);
 
-    staff.forEach(s=>{
+    staff.sort(sortByName).forEach(s=>{
       const col=document.createElement('div'); col.className='col';
       col.innerHTML=`<h4>${s.name}（${s.type==='PT'?'非常勤':'常勤'}）</h4><div class="calHost"></div>`;
       el.staffBoard.appendChild(col);
@@ -679,9 +829,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
       const cal=new FullCalendar.Calendar(host,{
         timeZone:'local', headerToolbar:false, initialView:'timeGridDay',
-        // ★ 表示日を固定＋その日のみを可視範囲
-        initialDate:startDay,
-        visibleRange:{ start:startDay, end:endDay },
+        initialDate:startDay, visibleRange:{ start:startDay, end:endDay },
         firstDay:1, locale:'ja', height:600, slotMinTime:'09:00', slotMaxTime:'18:00',
         expandRows:true, nowIndicator:true, allDaySlot:false,
         dayHeaderFormat:{ weekday:'short', month:'numeric', day:'numeric' },
@@ -850,6 +998,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     alert( (Number.isFinite(office.lat)&&Number.isFinite(office.lng)) ? '拠点の座標を保存しました' : '拠点を保存しました（座標は未取得）');
   });
 
+  // 追加
   el.addStaff?.addEventListener('click',()=>{
     const name=el.staffName.value.trim(); if(!name) return alert('スタッフ名を入力');
     const type=el.staffType.value;
@@ -887,16 +1036,27 @@ document.addEventListener('DOMContentLoaded',()=>{
     shifts.push({id:uid(),staffId,days,start:s,end:e}); save(); renderShifts();
   });
 
+  // === NG：スタッフ選択で既存NGを自動チェック ===
+  function refreshNGChecksForSelectedStaff(){
+    const sid = el.ngStaff.value;
+    const st=staff.find(x=>x.id===sid);
+    const set = new Set(st?.ngUserIds||[]);
+    el.ngUsers.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
+      cb.checked = set.has(cb.value);
+    });
+  }
+  el.ngStaff.addEventListener('change', refreshNGChecksForSelectedStaff);
+
   el.btnAddNG?.addEventListener('click',()=>{
     const sid=el.ngStaff.value; if(!sid) return;
     const st=staff.find(x=>x.id===sid); if(!st) return;
     const selected=[...el.ngUsers.querySelectorAll('input:checked')].map(i=>i.value);
-    const set=new Set(st.ngUserIds||[]); selected.forEach(id=>set.add(id)); st.ngUserIds=[...set];
-    save(); renderStaff(); el.ngUsers.querySelectorAll('input:checked').forEach(i=> i.checked=false);
-    alert('NGを追加しました');
+    st.ngUserIds=[...selected]; // 全置換
+    save(); renderStaff();
+    alert('NGを保存しました');
   });
 
-  // 利用者編集ダイアログ
+  // ==== 編集ダイアログ（利用者/スタッフ/パターン） ====
   function openUserEditor(userId){
     const u = users.find(x=>x.id===userId); if(!u) return;
     const overlay=document.createElement('div'); overlay.className='overlay';
@@ -930,8 +1090,9 @@ document.addEventListener('DOMContentLoaded',()=>{
         <button id="euClose" class="btn ghost">閉じる</button>
       </div>`;
     document.body.appendChild(overlay); document.body.appendChild(box);
-    const close=()=>{ overlay.remove(); box.remove(); };
-    document.getElementById('euClose').onclick=close; overlay.onclick=close;
+    overlay.addEventListener('click',(e)=>{ if(e.target===overlay) close(); });
+    function close(){ overlay.remove(); box.remove(); }
+    document.getElementById('euClose').onclick=close;
     document.getElementById('euGeocode').onclick=async ()=>{
       const ad = document.getElementById('euAddr').value.trim();
       if(!ad) return alert('住所を入力してください');
@@ -952,7 +1113,68 @@ document.addEventListener('DOMContentLoaded',()=>{
       const lg = parseFloat(document.getElementById('euLng').value);
       u.lat = Number.isFinite(lt)?lt:null;
       u.lng = Number.isFinite(lg)?lg:null;
-      save(); renderAll(); close();
+      save(); renderAll(); refreshNGChecksForSelectedStaff(); close();
+    };
+  }
+
+  function openStaffEditor(staffId){
+    const s = staff.find(x=>x.id===staffId); if(!s) return;
+    const overlay=document.createElement('div'); overlay.className='overlay';
+    const box=document.createElement('div'); box.className='modal';
+    box.innerHTML=`
+      <h3>スタッフ編集</h3>
+      <label>氏名</label>
+      <input id="esName" value="${s.name||''}">
+      <label>雇用区分</label>
+      <select id="esType">
+        <option value="FT" ${s.type==='FT'?'selected':''}>常勤</option>
+        <option value="PT" ${s.type==='PT'?'selected':''}>非常勤</option>
+      </select>
+      <div class="actions">
+        <button id="esSave" class="btn primary">保存</button>
+        <button id="esClose" class="btn ghost">閉じる</button>
+      </div>`;
+    document.body.appendChild(overlay); document.body.appendChild(box);
+    overlay.addEventListener('click',(e)=>{ if(e.target===overlay) close(); });
+    function close(){ overlay.remove(); box.remove(); }
+    document.getElementById('esClose').onclick=close;
+
+    document.getElementById('esSave').onclick=()=>{
+      s.name = document.getElementById('esName').value.trim() || s.name;
+      s.type = document.getElementById('esType').value;
+      save(); renderAll(); calendar.refetchEvents(); if(viewMode==='staffBoard') renderStaffBoard(); close();
+    };
+  }
+
+  function openPatternEditor(patternId){
+    const p = patterns.find(x=>x.id===patternId); if(!p) return;
+    const usersSorted=[...users].sort(sortByName);
+    const overlay=document.createElement('div'); overlay.className='overlay';
+    const box=document.createElement('div'); box.className='modal';
+    const options = usersSorted.map(u=>`<option value="${u.id}" ${u.id===p.userId?'selected':''}>${u.name}</option>`).join('');
+    const dayChip = (d)=>`<label class="chip"><input type="checkbox" value="${d}" ${p.days?.includes(d)?'checked':''}> ${d}</label>`;
+    box.innerHTML=`
+      <h3>パターン編集</h3>
+      <label>利用者</label>
+      <select id="epUser">${options}</select>
+      <label>曜日</label>
+      <div id="epDays" class="row">${['月','火','水','木','金','土','日'].map(dayChip).join('')}</div>
+      <label>開始時刻</label>
+      <input id="epTime" type="time" value="${p.time||'09:00'}">
+      <div class="actions">
+        <button id="epSave" class="btn primary">保存</button>
+        <button id="epClose" class="btn ghost">閉じる</button>
+      </div>
+    `;
+    document.body.appendChild(overlay); document.body.appendChild(box);
+    overlay.addEventListener('click',(e)=>{ if(e.target===overlay) close(); });
+    function close(){ overlay.remove(); box.remove(); }
+    document.getElementById('epClose').onclick=close;
+    document.getElementById('epSave').onclick=()=>{
+      p.userId = document.getElementById('epUser').value || p.userId;
+      p.time   = document.getElementById('epTime').value || p.time;
+      p.days   = [...document.querySelectorAll('#epDays input:checked')].map(c=>c.value);
+      save(); renderPatterns(); close();
     };
   }
 
@@ -965,6 +1187,9 @@ document.addEventListener('DOMContentLoaded',()=>{
       events=events.filter(ev=> parseTitleStaff(ev)!==rm );
       save(); renderAll(); calendar.refetchEvents(); if(viewMode==='staffBoard') renderStaffBoard();
     }
+    if(t.classList.contains('editStaff')){
+      const id=t.dataset.id; openStaffEditor(id);
+    }
     if(t.classList.contains('delUser')){
       const id=t.dataset.id; const uname=users.find(x=>x.id===id)?.name;
       users=users.filter(x=>x.id!==id);
@@ -976,7 +1201,12 @@ document.addEventListener('DOMContentLoaded',()=>{
     if(t.classList.contains('editUser')){
       const id=t.dataset.id; openUserEditor(id);
     }
-    if(t.classList.contains('delPattern')){ const id=t.dataset.id; patterns=patterns.filter(p=>p.id!==id); save(); renderPatterns(); }
+    if(t.classList.contains('delPattern')){
+      const id=t.dataset.id; patterns=patterns.filter(p=>p.id!==id); save(); renderPatterns();
+    }
+    if(t.classList.contains('editPattern')){
+      const id=t.dataset.id; openPatternEditor(id);
+    }
     if(t.classList.contains('delShift')){ const id=t.dataset.id; shifts=shifts.filter(p=>p.id!==id); save(); renderShifts(); }
   });
 
