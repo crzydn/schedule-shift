@@ -43,8 +43,10 @@
   .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
   .chip{background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:6px 10px;display:flex;align-items:center;gap:8px}
   aside .row>button{background:var(--brand);color:#fff;border-color:var(--brand);font-weight:800;box-shadow:0 1px 4px rgba(47,125,246,.18)}
-  .chip>button{background:var(--danger);color:#fff;border-color:var(--danger);padding:6px 10px;border-radius:999px;font-weight:800}
+  .chip>button{padding:6px 10px;border-radius:999px;font-weight:800}
   .chip .ghost{background:#fff;color:var(--brand);border:1px solid var(--brand)}
+  .chip .warn{background:#fff3cd;border:1px solid #ffe08a;color:#856404}
+  .chip .danger{background:#E05252;color:#fff;border:1px solid #E05252}
   .sticky-bottom .primary{background:linear-gradient(180deg,var(--brand-2),var(--brand));border-color:var(--brand);color:#fff;box-shadow:0 2px 8px rgba(47,125,246,.28)}
 
   #calendar{min-height:78vh}
@@ -57,12 +59,11 @@
   .fc-v-event:hover{filter:brightness(1.04);transform:translateY(-1px);transition:.15s}
 
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:999}
-  .modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:14px;box-shadow:var(--modal-shadow);padding:16px;z-index:1000;min-width:360px;max-width:92vw;border:1px solid var(--line)}
+  .modal{position:fixed;top:50%;left:50%;transform:translate(-50%, -50%);background:#fff;border-radius:14px;box-shadow:var(--modal-shadow);padding:16px;z-index:1000;min-width:380px;max-width:92vw;border:1px solid var(--line)}
   .modal h3{margin-top:0}
   .actions{display:flex;gap:8px;margin-top:10px}
   .btn{padding:10px 12px;border-radius:10px;border:1px solid var(--line);cursor:pointer;font-weight:800}
   .btn.primary{background:linear-gradient(180deg,var(--brand-2),var(--brand));color:#fff;border-color:var(--brand)}
-  .btn.danger{background:var(--danger);color:#fff;border-color:var(--danger)}
   .btn.ghost{background:#fff;color:var(--brand);border-color:var(--brand)}
 
   body.header-hidden header{display:none;}
@@ -152,7 +153,7 @@
     <h3>利用者登録</h3>
     <div class="row">
       <input id="userName" placeholder="利用者氏名（例：田中）" />
-      <select id="userDuration" style="max-width:120px"><option value="60">60分</option><option value="30">30分</option></select>
+      <select id="userDuration" style="max-width:120px"><option value="60">60分</option><option value="30">30分</option><option value="90">90分</option></select>
     </div>
     <input id="userAddress" placeholder="住所（任意）：例）大阪府大阪市浪速区恵美須西3-8-8" />
     <div class="row"><button id="addUser">追加</button></div>
@@ -218,12 +219,11 @@ document.addEventListener('DOMContentLoaded',()=>{
       box.addEventListener(evt, e=> e.stopPropagation(), {passive:true});
     });
     overlay.addEventListener('click', (e)=>{ if(e.target===overlay) close(); });
-    overlay.dataset.armed='0';
-    setTimeout(()=>{ overlay.dataset.armed='1'; },120);
+    setTimeout(()=>{ /* 起動遅延で誤爆予防 */ },120);
   }
 
   // ====== State ======
-  let office={address:''}; // 住所のみ運用（座標は使わない方針）
+  let office={address:''};
   let staff=[], users=[], patterns=[], shifts=[], events=[];
   let skippedAssignments=[];
   let viewMode='standard';
@@ -268,19 +268,23 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
   }catch(e){console.error('load failed',e)}};
 
-  // ====== Render helpers ======
+  // ====== 並び順 & レンダリング ======
+  const sortStaffFTName=(a,b)=> (a.type!==b.type) ? (a.type==='FT'?-1:1) : (a.name||'').localeCompare(b.name||'','ja');
+  const sortByName=(a,b)=> (a.name||'').localeCompare(b.name||'','ja');
+
   const hydrateSelects=()=>{
-    const staffSorted=[...staff].sort((a,b)=> (a.name||'').localeCompare(b.name||'','ja'));
+    const staffSorted=[...staff].sort(sortStaffFTName);
     el.shiftStaff.innerHTML=''; staffSorted.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=s.name; el.shiftStaff.appendChild(o); });
     el.ngStaff.innerHTML=''; staffSorted.forEach(s=>{ const o=document.createElement('option'); o.value=s.id; o.textContent=`${s.name}（${s.type==='PT'?'非常勤':'常勤'}）`; el.ngStaff.appendChild(o); });
 
-    const usersSorted=[...users].sort((a,b)=> (a.name||'').localeCompare(b.name||'','ja'));
+    const usersSorted=[...users].sort(sortByName);
     el.patternUser.innerHTML=''; usersSorted.forEach(u=>{ const o=document.createElement('option'); o.value=u.id; o.textContent=u.name; el.patternUser.appendChild(o); });
 
     el.ngUsers.innerHTML=''; usersSorted.forEach(u=>{ const lab=document.createElement('label'); lab.className='chip'; lab.innerHTML=`<input type="checkbox" value="${u.id}"> ${u.name}`; el.ngUsers.appendChild(lab); });
   };
-  const renderStaff=()=>{
-    const staffSorted=[...staff].sort((a,b)=> (a.name||'').localeCompare(b.name||'','ja'));
+
+  function renderStaff(){
+    const staffSorted=[...staff].sort(sortStaffFTName);
     el.staffList.innerHTML='';
     staffSorted.forEach(s=>{
       const ngNames=(s.ngUserIds||[]).map(id=>users.find(u=>u.id===id)?.name).filter(Boolean);
@@ -288,12 +292,14 @@ document.addEventListener('DOMContentLoaded',()=>{
       el.staffList.innerHTML+=`
         <span class='chip'>
           ${s.name}（${s.type==='PT'?'非常勤':'常勤'}） ${ngText}
-          <button class='delStaff' data-id='${s.id}'>削除</button>
+          <button class='ghost editStaff' data-id='${s.id}'>編集</button>
+          <button class='danger delStaff' data-id='${s.id}'>削除</button>
         </span>`;
     });
-  };
-  const renderUsers=()=>{
-    const usersSorted=[...users].sort((a,b)=> (a.name||'').localeCompare(b.name||'','ja'));
+  }
+
+  function renderUsers(){
+    const usersSorted=[...users].sort(sortByName);
     el.userList.innerHTML='';
     usersSorted.forEach(u=>{
       const addr=u.address||'(住所なし)';
@@ -301,19 +307,44 @@ document.addEventListener('DOMContentLoaded',()=>{
         <span class='chip'>
           ${u.name}（${u.duration||60}分） ｜ 住所：${addr}
           <button class='ghost editUser' data-id='${u.id}'>編集</button>
-          <button class='delUser' data-id='${u.id}'>削除</button>
+          <button class='danger delUser' data-id='${u.id}'>削除</button>
         </span>`;
     });
-  };
-  const renderPatterns=()=>{ el.patternList.innerHTML=''; patterns.forEach(p=>{ const u=users.find(x=>x.id===p.userId); el.patternList.innerHTML+=`<span class='chip'>${u?u.name:'不明'}：${(p.days||[]).join('・')} ${p.time||''} <button class='delPattern' data-id='${p.id}'>削除</button></span>`; }); };
-  const renderShifts=()=>{ el.shiftList.innerHTML=''; shifts.forEach(s=>{ const stf=staff.find(x=>x.id===s.staffId); el.shiftList.innerHTML+=`<span class='chip'>${stf?stf.name:'不明'}：${s.days.join('・')} ${s.start}〜${s.end} <button class='delShift' data-id='${s.id}'>削除</button></span>`; }); };
+  }
+
+  function renderPatterns(){
+    el.patternList.innerHTML='';
+    patterns.forEach(p=>{
+      const u=users.find(x=>x.id===p.userId);
+      el.patternList.innerHTML+=`
+        <span class='chip'>
+          ${u?u.name:'不明'}：${(p.days||[]).join('・')} ${p.time||''}
+          <button class='ghost editPattern' data-id='${p.id}'>編集</button>
+          <button class='danger delPattern' data-id='${p.id}'>削除</button>
+        </span>`;
+    });
+  }
+
+  function renderShifts(){
+    el.shiftList.innerHTML='';
+    shifts.forEach(s=>{
+      const stf=staff.find(x=>x.id===s.staffId);
+      el.shiftList.innerHTML+=`
+        <span class='chip'>
+          ${stf?stf.name:'不明'}：${s.days.join('・')} ${s.start}〜${s.end}
+          <button class='ghost editShift' data-id='${s.id}'>編集</button>
+          <button class='danger delShift' data-id='${s.id}'>削除</button>
+        </span>`;
+    });
+  }
+
   const renderOffice=()=>{
     el.officeAddress.value = office.address||'';
     el.officeInfo.textContent = office.address ? office.address : '未設定';
   }
   const renderAll=()=>{ hydrateSelects(); renderStaff(); renderUsers(); renderPatterns(); renderShifts(); renderOffice(); };
 
-  // ====== 標準カレンダー ======
+  // ====== カレンダー（標準） ======
   const calendar=new FullCalendar.Calendar(el.calendarHost,{
     timeZone:'local',
     headerToolbar: isMobile()? {left:'prev,next today',center:'title',right:'timeGridDay'} : {left:'prev,next today',center:'title',right:'timeGridWeek,timeGridDay'},
@@ -357,26 +388,26 @@ document.addEventListener('DOMContentLoaded',()=>{
     save();
   }
 
-  // ==== 新規作成モーダル（手打ち＋プルダウン両対応） ====
-  function openCreateEventDialog({baseDate, defaultStart='09:00', defaultDur=60, defaultStaffName=''}) {
+  // ==== 新規作成モーダル ====
+  function armAndMountModal(html){
     const overlay=document.createElement('div'); overlay.className='overlay';
-    const box=document.createElement('div'); box.className='modal';
+    const box=document.createElement('div'); box.className='modal'; box.innerHTML=html;
+    document.body.appendChild(overlay); document.body.appendChild(box);
+    const close=()=>{ overlay.remove(); box.remove(); };
+    armModal(overlay, box, close);
+    return {overlay,box,close};
+  }
+
+  function openCreateEventDialog({baseDate, defaultStart='09:00', defaultDur=60, defaultStaffName=''}) {
     const dateStr=fmtDateLocal(baseDate||new Date());
-    const userOptions=[...users].sort((a,b)=>a.name.localeCompare(b.name,'ja')).map(u=>`<option value="${u.name}">${u.name}</option>`).join('');
-    const staffOptions=[...staff].sort((a,b)=>a.name.localeCompare(b.name,'ja')).map(s=>`<option value="${s.name}">${s.name}</option>`).join('');
-    box.innerHTML = `
+    const userOptions=[...users].sort(sortByName).map(u=>`<option value="${u.name}">${u.name}</option>`).join('');
+    const staffOptions=[...staff].sort(sortStaffFTName).map(s=>`<option value="${s.name}">${s.name}</option>`).join('');
+    const {overlay,box,close}=armAndMountModal(`
       <h3>訪問イベント追加</h3>
       <div class="row">
-        <div style="flex:1">
-          <label>日付</label>
-          <input id="ceDate" type="date" value="${dateStr}">
-        </div>
-        <div style="flex:1">
-          <label>開始</label>
-          <input id="ceStart" type="time" value="${defaultStart}">
-        </div>
-        <div style="flex:1">
-          <label>時間（分）</label>
+        <div style="flex:1"><label>日付</label><input id="ceDate" type="date" value="${dateStr}"></div>
+        <div style="flex:1"><label>開始</label><input id="ceStart" type="time" value="${defaultStart}"></div>
+        <div style="flex:1"><label>時間（分）</label>
           <select id="ceDur"><option value="30" ${defaultDur===30?'selected':''}>30</option><option value="60" ${defaultDur===60?'selected':''}>60</option><option value="90" ${defaultDur===90?'selected':''}>90</option></select>
         </div>
       </div>
@@ -395,97 +426,169 @@ document.addEventListener('DOMContentLoaded',()=>{
       <div class="actions">
         <button id="ceSave" class="btn primary">追加</button>
         <button id="ceClose" class="btn ghost">閉じる</button>
-      </div>`;
-    document.body.appendChild(overlay); document.body.appendChild(box);
-    const close=()=>{ overlay.remove(); box.remove(); };
-    armModal(overlay, box, close); // ← 誤爆防止
-    document.getElementById('ceClose').onclick=close;
-    document.getElementById('ceSave').onclick=()=>{
-      const d=document.getElementById('ceDate').value||dateStr;
-      const st=document.getElementById('ceStart').value||defaultStart;
-      const dur=parseInt(document.getElementById('ceDur').value)||60;
-      const usr=(document.getElementById('ceUserInput').value||'').trim();
-      const stf=(document.getElementById('ceStaffInput').value||'').trim();
+      </div>
+    `);
+    box.querySelector('#ceClose').onclick=close;
+    box.querySelector('#ceSave').onclick=()=>{
+      const d=box.querySelector('#ceDate').value||dateStr;
+      const st=box.querySelector('#ceStart').value||defaultStart;
+      const dur=parseInt(box.querySelector('#ceDur').value)||60;
+      const usr=(box.querySelector('#ceUserInput').value||'').trim();
+      const stf=(box.querySelector('#ceStaffInput').value||'').trim();
       if(!usr||!stf) return alert('利用者とスタッフを入力してください');
       const end=(function(hhmm,m){const [h,mi]=hhmm.split(':').map(Number);const t=new Date();t.setHours(h);t.setMinutes(mi+m);return t.toTimeString().slice(0,5)})(st,dur);
       const col=colorByStaffName(stf);
-      events.push({
-        id:uid(),
-        title:`${usr}（${stf}）`,
-        start:`${d}T${st}:00`,
-        end:`${d}T${end}:00`,
-        extendedProps:{staffName:stf},
-        backgroundColor:col,borderColor:'var(--event-border)'
-      });
-      save(); calendar.refetchEvents(); if(viewMode==='staffBoard') renderStaffBoard();
-      close();
-    };
-  }
-
-  // ==== 共通エディタ（idベースで編集／削除） ====
-  function openEditorById(eventId){
-    const rec = events.find(e=>e.id===eventId);
-    if(!rec) return;
-    const dStart = new Date(rec.start);
-    const user=parseTitleUser(rec); const staffName=parseTitleStaff(rec);
-    const dur = Math.round(((new Date(rec.end))-dStart)/60000) || 60;
-
-    const overlay=document.createElement('div'); overlay.className='overlay';
-    const box=document.createElement('div'); box.className='modal';
-    box.innerHTML = `
-      <h3>訪問プレビュー</h3>
-      <div class="row">
-        <div style="flex:1"><label>日付</label><input id="pvDate" type="date" value="${fmtDateLocal(dStart)}"></div>
-        <div style="flex:1"><label>開始</label><input id="pvStart" type="time" value="${dStart.toTimeString().slice(0,5)}"></div>
-        <div style="flex:1"><label>時間（分）</label><select id="pvDur"><option value="30" ${dur===30?'selected':''}>30</option><option value="60" ${dur===60?'selected':''}>60</option><option value="90" ${dur===90?'selected':''}>90</option></select></div>
-      </div>
-      <div class="row" style="margin-top:6px">
-        <div style="flex:1">
-          <label>スタッフ</label>
-          <input id="pvStaff" list="pvStaffList" value="${staffName}">
-          <datalist id="pvStaffList">${[...new Set(staff.map(s=>s.name))].sort((a,b)=>a.localeCompare(b,'ja')).map(n=>`<option value="${n}">`).join('')}</datalist>
-        </div>
-        <div style="flex:1">
-          <label>利用者</label>
-          <input id="pvUser" list="pvUserList" value="${user}">
-          <datalist id="pvUserList">${[...new Set(users.map(u=>u.name))].sort((a,b)=>a.localeCompare(b,'ja')).map(n=>`<option value="${n}">`).join('')}</datalist>
-        </div>
-      </div>
-      <div class="actions">
-        <button id="pvSave" class="btn primary">保存</button>
-        <button id="pvDelete" class="btn danger">削除</button>
-        <button id="pvClose" class="btn ghost">閉じる</button>
-      </div>`;
-    document.body.appendChild(overlay); document.body.appendChild(box);
-    const close=()=>{ overlay.remove(); box.remove(); };
-    armModal(overlay, box, close); // ← 誤爆防止
-    document.getElementById('pvClose').onclick=close;
-    document.getElementById('pvDelete').onclick=()=>{
-      if(confirm('削除しますか？')){
-        events = events.filter(e=>e.id!==eventId);
-        save(); calendar.refetchEvents(); if(viewMode==='staffBoard') renderStaffBoard(); close();
-      }
-    };
-    document.getElementById('pvSave').onclick=()=>{
-      const day = document.getElementById('pvDate').value || fmtDateLocal(dStart);
-      const st = document.getElementById('pvStart').value || '09:00';
-      const ndur = parseInt(document.getElementById('pvDur').value)||60;
-      const stf = (document.getElementById('pvStaff').value||'').trim() || staffName;
-      const usr = (document.getElementById('pvUser').value||'').trim() || user;
-      if(!stf||!usr) return alert('スタッフと利用者を入力してください');
-      const endStr = (function(hhmm,m){ const [h,mi]=hhmm.split(':').map(Number); const d=new Date(); d.setHours(h); d.setMinutes(mi+m); return d.toTimeString().slice(0,5);} )(st,ndur);
-
-      rec.title = `${usr}（${stf}）`;
-      rec.start = `${day}T${st}:00`;
-      rec.end   = `${day}T${endStr}:00`;
-      rec.extendedProps = {...(rec.extendedProps||{}), staffName: stf};
-      rec.backgroundColor = colorByStaffName(stf);
-      rec.borderColor = 'var(--event-border)';
+      events.push({ id:uid(), title:`${usr}（${stf}）`, start:`${d}T${st}:00`, end:`${d}T${end}:00`, extendedProps:{staffName:stf}, backgroundColor:col, borderColor:'var(--event-border)' });
       save(); calendar.refetchEvents(); if(viewMode==='staffBoard') renderStaffBoard(); close();
     };
   }
 
-  // ====== 自動割当（既存ロジック：重複抑止/NG/シフト帯順守） ======
+  // ==== 編集モーダル群 ====
+  function renameStaffEverywhere(oldName,newName){
+    if(oldName===newName) return;
+    events.forEach(ev=>{
+      const sn=parseTitleStaff(ev);
+      if(sn===oldName){
+        const user=parseTitleUser(ev);
+        ev.title=`${user}（${newName}）`;
+        ev.extendedProps={...(ev.extendedProps||{}), staffName:newName};
+        ev.backgroundColor=colorByStaffName(newName);
+        ev.borderColor='var(--event-border)';
+      }
+    });
+  }
+  function renameUserEverywhere(oldName,newName){
+    if(oldName===newName) return;
+    events.forEach(ev=>{
+      const un=parseTitleUser(ev);
+      if(un===oldName){
+        const staff=parseTitleStaff(ev);
+        ev.title=`${newName}（${staff}）`;
+      }
+    });
+  }
+
+  function openUserEditor(userId){
+    const u = users.find(x=>x.id===userId); if(!u) return;
+    const {box,close}=armAndMountModal(`
+      <h3>利用者編集</h3>
+      <label>氏名</label><input id="euName" value="${u.name||''}">
+      <div class="row">
+        <div style="flex:1">
+          <label>所要時間（分）</label>
+          <select id="euDur">
+            <option value="30" ${u.duration===30?'selected':''}>30</option>
+            <option value="60" ${u.duration===60?'selected':''}>60</option>
+            <option value="90" ${u.duration===90?'selected':''}>90</option>
+          </select>
+        </div>
+      </div>
+      <label>住所（任意）</label><input id="euAddr" value="${u.address||''}">
+      <div class="actions">
+        <button id="euSave" class="btn primary">保存</button>
+        <button id="euClose" class="btn ghost">閉じる</button>
+      </div>
+    `);
+    box.querySelector('#euClose').onclick=close;
+    box.querySelector('#euSave').onclick=()=>{
+      const oldName=u.name;
+      u.name = (box.querySelector('#euName').value||'').trim()||u.name;
+      u.duration = parseInt(box.querySelector('#euDur').value)||u.duration||60;
+      u.address = (box.querySelector('#euAddr').value||'').trim();
+      renameUserEverywhere(oldName,u.name);
+      save(); renderAll(); calendar.refetchEvents(); if(viewMode==='staffBoard') renderStaffBoard(); close();
+    };
+  }
+
+  function openStaffEditor(staffId){
+    const s = staff.find(x=>x.id===staffId); if(!s) return;
+    const {box,close}=armAndMountModal(`
+      <h3>スタッフ編集</h3>
+      <label>氏名</label><input id="esName" value="${s.name||''}">
+      <label>区分</label>
+      <select id="esType">
+        <option value="FT" ${s.type==='FT'?'selected':''}>常勤</option>
+        <option value="PT" ${s.type==='PT'?'selected':''}>非常勤</option>
+      </select>
+      <div class="actions">
+        <button id="esSave" class="btn primary">保存</button>
+        <button id="esClose" class="btn ghost">閉じる</button>
+      </div>
+    `);
+    box.querySelector('#esClose').onclick=close;
+    box.querySelector('#esSave').onclick=()=>{
+      const oldName=s.name;
+      const newName=(box.querySelector('#esName').value||'').trim()||s.name;
+      const newType=box.querySelector('#esType').value;
+      s.name=newName; s.type=newType;
+      renameStaffEverywhere(oldName,newName);
+      save(); renderAll(); calendar.refetchEvents(); if(viewMode==='staffBoard') renderStaffBoard(); close();
+    };
+  }
+
+  function openPatternEditor(patternId){
+    const p = patterns.find(x=>x.id===patternId); if(!p) return;
+    const usersSorted=[...users].sort(sortByName);
+    const userOptions=usersSorted.map(u=>`<option value="${u.id}" ${u.id===p.userId?'selected':''}>${u.name}</option>`).join('');
+    const daysJP=['月','火','水','木','金','土','日'];
+    const checked = new Set(p.days||[]);
+    const {box,close}=armAndMountModal(`
+      <h3>基本訪問パターン編集</h3>
+      <label>利用者</label>
+      <select id="epUser">${userOptions}</select>
+      <label>曜日</label>
+      <div id="epDays" class="row">
+        ${daysJP.map(d=>`<label class="chip"><input type="checkbox" value="${d}" ${checked.has(d)?'checked':''}> ${d}</label>`).join('')}
+      </div>
+      <label>開始時刻</label><input id="epTime" type="time" value="${p.time||'09:00'}">
+      <div class="actions">
+        <button id="epSave" class="btn primary">保存</button>
+        <button id="epClose" class="btn ghost">閉じる</button>
+      </div>
+    `);
+    box.querySelector('#epClose').onclick=close;
+    box.querySelector('#epSave').onclick=()=>{
+      p.userId = box.querySelector('#epUser').value||p.userId;
+      p.days = [...box.querySelectorAll('#epDays input:checked')].map(i=>i.value);
+      p.time = box.querySelector('#epTime').value||p.time||'09:00';
+      save(); renderPatterns(); close();
+    };
+  }
+
+  function openShiftEditor(shiftId){
+    const sft = shifts.find(x=>x.id===shiftId); if(!sft) return;
+    const staffSorted=[...staff].sort(sortStaffFTName);
+    const staffOpts=staffSorted.map(s=>`<option value="${s.id}" ${s.id===sft.staffId?'selected':''}>${s.name}（${s.type==='FT'?'常勤':'非常勤'}）</option>`).join('');
+    const daysJP=['月','火','水','木','金','土','日'];
+    const checked = new Set(sft.days||[]);
+    const {box,close}=armAndMountModal(`
+      <h3>出勤パターン編集</h3>
+      <label>スタッフ</label>
+      <select id="esfStaff">${staffOpts}</select>
+      <label>曜日</label>
+      <div id="esfDays" class="row">
+        ${daysJP.map(d=>`<label class="chip"><input type="checkbox" value="${d}" ${checked.has(d)?'checked':''}> ${d}</label>`).join('')}
+      </div>
+      <div class="row">
+        <div style="flex:1"><label>開始</label><input id="esfStart" type="time" value="${sft.start||'09:00'}"></div>
+        <div style="flex:1"><label>終了</label><input id="esfEnd" type="time" value="${sft.end||'18:00'}"></div>
+      </div>
+      <div class="actions">
+        <button id="esfSave" class="btn primary">保存</button>
+        <button id="esfClose" class="btn ghost">閉じる</button>
+      </div>
+    `);
+    box.querySelector('#esfClose').onclick=close;
+    box.querySelector('#esfSave').onclick=()=>{
+      sft.staffId = box.querySelector('#esfStaff').value||sft.staffId;
+      sft.days = [...box.querySelectorAll('#esfDays input:checked')].map(i=>i.value);
+      sft.start = box.querySelector('#esfStart').value||sft.start||'09:00';
+      sft.end   = box.querySelector('#esfEnd').value||sft.end||'18:00';
+      save(); renderShifts(); close();
+    };
+  }
+
+  // ====== 自動割当（既存：重複抑止/NG/シフト帯順守） ======
   function countAssignedForWeek(staffName, monday, nextMonday){
     let c=0;
     (events||[]).forEach(ev=>{
@@ -527,9 +630,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         const endISO   = `${fmtDateLocal(day)}T${en}:00`;
         const dayLabel = weekdayLabel(day);
 
-        const candidates = staff.filter(s=> hasShiftLocal(s.id,dayLabel,st,en));
-        const pt = candidates.filter(c=> c.type==='PT' && !(c.ngUserIds||[]).includes(u.id));
-        const ft = candidates.filter(c=> c.type==='FT' && !(c.ngUserIds||[]).includes(u.id));
+        const candidates = staff.filter(s=> hasShiftLocal(s.id,dayLabel,st,en) && !(s.ngUserIds||[]).includes(u.id));
 
         const placeable=(cand)=>{
           const sn=cand.name; const ns=new Date(startISO), ne=new Date(endISO);
@@ -541,6 +642,10 @@ document.addEventListener('DOMContentLoaded',()=>{
           });
           return !clash;
         };
+
+        // FT/PT順: PT優先→FT均等（必要ならここを調整）
+        const pt = candidates.filter(c=> c.type==='PT');
+        const ft = candidates.filter(c=> c.type==='FT');
 
         let picked=null;
         for(const cand of pt){ if(placeable(cand)){ picked=cand; break; } }
@@ -555,13 +660,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         }
 
         const col=colorByStaffName(picked.name);
-        events.push({
-          id: uid(),
-          title:`${u.name}（${picked.name}）`,
-          start:startISO, end:endISO,
-          extendedProps:{staffName:picked.name},
-          backgroundColor:col, borderColor:'var(--event-border)'
-        });
+        events.push({ id: uid(), title:`${u.name}（${picked.name}）`, start:startISO, end:endISO, extendedProps:{staffName:picked.name}, backgroundColor:col, borderColor:'var(--event-border)' });
         placed++;
       }
     }
@@ -572,8 +671,6 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   function showSkippedModal(){
     if(!skippedAssignments.length) return;
-    const overlay=document.createElement('div'); overlay.className='overlay';
-    const box=document.createElement('div'); box.className='modal'; box.style.minWidth='600px';
     const rows = skippedAssignments.map((s,idx)=>{
       const uname = users.find(u=>u.id===s.userId)?.name || '(不明)';
       const date = s.date||'(日付)'; const st = s.start||'09:00'; const en = s.end||'10:00';
@@ -597,23 +694,16 @@ document.addEventListener('DOMContentLoaded',()=>{
         </tr>
       `;
     }).join('');
-    box.innerHTML=`
+    const {box,close}=armAndMountModal(`
       <h3>見送り一覧（編集して配置できます）</h3>
       <div style="max-height:50vh; overflow:auto;">
         <table style="width:100%; border-collapse:collapse;">
-          <thead>
-            <tr style="text-align:left;">
-              <th>日付</th><th>開始</th><th>終了</th><th>利用者</th><th>スタッフ</th><th>理由</th><th></th>
-            </tr>
-          </thead>
+          <thead><tr><th>日付</th><th>開始</th><th>終了</th><th>利用者</th><th>スタッフ</th><th>理由</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
       <div class="actions"><button id="skClose" class="btn ghost">閉じる</button></div>
-    `;
-    document.body.appendChild(overlay); document.body.appendChild(box);
-    const close=()=>{ overlay.remove(); box.remove(); };
-    armModal(overlay, box, close); // ← 誤爆防止
+    `);
     box.addEventListener('click', (e)=>{
       const t=e.target; if(!(t instanceof HTMLElement)) return;
       if(t.classList.contains('sk-place')){
@@ -621,22 +711,19 @@ document.addEventListener('DOMContentLoaded',()=>{
         const rec=skippedAssignments[idx]; if(!rec) return;
         const st=tr.querySelector('.sk-st').value || rec.start;
         const en=tr.querySelector('.sk-en').value || rec.end;
-        const sid=tr.querySelector('.sk-staff').value;
-        if(!sid) return alert('スタッフを選択してください');
-
+        const sid=tr.querySelector('.sk-staff').value; if(!sid) return alert('スタッフを選択してください');
         const sf=staff.find(x=>x.id===sid); const u=users.find(x=>x.id===rec.userId);
         const startISO = `${rec.date}T${st}:00`; const endISO = `${rec.date}T${en}:00`;
         const col=colorByStaffName(sf.name);
-        events.push({ id:uid(), title:`${u.name}（${sf.name}）`, start:startISO, end:endISO,
-          extendedProps:{staffName:sf.name}, backgroundColor:col, borderColor:'var(--event-border)' });
+        events.push({ id:uid(), title:`${u.name}（${sf.name}）`, start:startISO, end:endISO, extendedProps:{staffName:sf.name}, backgroundColor:col, borderColor:'var(--event-border)' });
         skippedAssignments.splice(idx,1); tr.remove();
         save(); calendar.refetchEvents(); if(viewMode==='staffBoard') renderStaffBoard();
       }
     });
-    document.getElementById('skClose').onclick=close;
+    box.querySelector('#skClose').onclick=close;
   }
 
-  // ====== スタッフ別ボード（＋日付選択／編集・新規作成・ドラッグ同期） ======
+  // ====== スタッフ別ボード（編集・新規作成・ドラッグ同期） ======
   let staffCalendars=[];
   function renderStaffBoard(){
     staffCalendars.forEach(sc=> sc.cal.destroy());
@@ -723,7 +810,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   el.sbNext.addEventListener('click',()=>{ staffBoardDate.setDate(staffBoardDate.getDate()+1); renderStaffBoard(); });
   el.sbDate.addEventListener('change',(e)=>{ const v=e.target.value; if(v){ staffBoardDate=new Date(v+'T00:00:00'); renderStaffBoard(); }});
 
-  // ====== 印刷：現在の表示に合わせて片方のみ ======
+  // ====== 印刷 ======
   function buildPrintHTML(){
     el.printView.innerHTML='';
     if(viewMode==='standard'){
@@ -835,7 +922,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   // ====== データ変更系 ======
   const renderWeekdayChecks=(c)=>{ c.innerHTML=''; dayNamesJP.forEach(d=>{ const w=document.createElement('label'); w.className='chip'; w.innerHTML=`<input type="checkbox" value="${d}"> ${d}`; c.appendChild(w); }); };
 
-  // 拠点保存（住所のみ）
+  // 拠点保存
   el.btnSaveOffice?.addEventListener('click', ()=>{
     office.address = (el.officeAddress.value||'').trim();
     save(); renderOffice();
@@ -852,8 +939,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     const name=el.userName.value.trim(); if(!name) return alert('利用者名を入力');
     const duration=parseInt(el.userDuration.value)||60;
     const address=(el.userAddress.value||'').trim();
-    const id=uid();
-    users.push({id,name,duration,address});
+    users.push({id:uid(),name,duration,address});
     el.userName.value=''; el.userAddress.value='';
     save(); renderAll(); if(viewMode==='staffBoard') renderStaffBoard();
   });
@@ -882,46 +968,15 @@ document.addEventListener('DOMContentLoaded',()=>{
     alert('NGを追加しました');
   });
 
-  // 利用者編集ダイアログ
-  function openUserEditor(userId){
-    const u = users.find(x=>x.id===userId); if(!u) return;
-    const overlay=document.createElement('div'); overlay.className='overlay';
-    const box=document.createElement('div'); box.className='modal';
-    box.innerHTML=`
-      <h3>利用者編集</h3>
-      <label>氏名</label>
-      <input id="euName" value="${u.name||''}">
-      <div class="row">
-        <div style="flex:1">
-          <label>所要時間（分）</label>
-          <select id="euDur">
-            <option value="30" ${u.duration===30?'selected':''}>30</option>
-            <option value="60" ${u.duration===60?'selected':''}>60</option>
-            <option value="90" ${u.duration===90?'selected':''}>90</option>
-          </select>
-        </div>
-      </div>
-      <label>住所（任意）</label>
-      <input id="euAddr" value="${u.address||''}">
-      <div class="actions">
-        <button id="euSave" class="btn primary">保存</button>
-        <button id="euClose" class="btn ghost">閉じる</button>
-      </div>`;
-    document.body.appendChild(overlay); document.body.appendChild(box);
-    const close=()=>{ overlay.remove(); box.remove(); };
-    armModal(overlay, box, close); // ← 誤爆防止
-    document.getElementById('euClose').onclick=close;
-    document.getElementById('euSave').onclick=()=>{
-      u.name = document.getElementById('euName').value.trim()||u.name;
-      u.duration = parseInt(document.getElementById('euDur').value)||u.duration||60;
-      u.address = document.getElementById('euAddr').value.trim();
-      save(); renderAll(); close();
-    };
-  }
-
-  // 削除/編集（委譲）
+  // ====== 委譲クリック（編集/削除） ======
   document.body.addEventListener('click',(e)=>{
     const t=e.target; if(!(t instanceof HTMLElement)) return;
+
+    if(t.classList.contains('editUser')){ openUserEditor(t.dataset.id); }
+    if(t.classList.contains('editStaff')){ openStaffEditor(t.dataset.id); }
+    if(t.classList.contains('editPattern')){ openPatternEditor(t.dataset.id); }
+    if(t.classList.contains('editShift')){ openShiftEditor(t.dataset.id); }
+
     if(t.classList.contains('delStaff')){
       const id=t.dataset.id; const rm=staff.find(x=>x.id===id)?.name;
       staff=staff.filter(x=>x.id!==id);
@@ -935,9 +990,6 @@ document.addEventListener('DOMContentLoaded',()=>{
       events=events.filter(ev=> !uname || !ev.title?.startsWith(`${uname}（`));
       staff = staff.map(s=>({...s, ngUserIds:(s.ngUserIds||[]).filter(x=>x!==id)}));
       save(); renderAll(); calendar.refetchEvents(); if(viewMode==='staffBoard') renderStaffBoard();
-    }
-    if(t.classList.contains('editUser')){
-      const id=t.dataset.id; openUserEditor(id);
     }
     if(t.classList.contains('delPattern')){ const id=t.dataset.id; patterns=patterns.filter(p=>p.id!==id); save(); renderPatterns(); }
     if(t.classList.contains('delShift')){ const id=t.dataset.id; shifts=shifts.filter(p=>p.id!==id); save(); renderShifts(); }
