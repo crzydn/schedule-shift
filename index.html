@@ -10,7 +10,7 @@
   :root{
     --brand:#2F7DF6; --brand-2:#6BB6FF; --bg:#F6FAFF; --panel:#FFFFFF; --line:#D9E7FB;
     --text:#0C1B2A; --muted:#6E7F95; --chip:#EEF6FF; --danger:#E05252; --ok:#2FBF71;
-    --event-border:rgba(255,255,255,.96); --modal-shadow:0 10px 30px rgba(0,0,0,.25);
+    --event-border:rgba(0,0,0,.12); --modal-shadow:0 10px 30px rgba(0,0,0,.25);
   }
   body{font-family:'Noto Sans JP',system-ui,sans-serif;margin:0;background:var(--bg);color:var(--text)}
   header{
@@ -26,10 +26,6 @@
     color:#fff;font-weight:800;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.15);transition:.15s ease;
   }
   header .btns button:hover{background:rgba(255,255,255,.22);transform:translateY(-1px);}
-  #btnPrintCurrentA4{
-    background:linear-gradient(180deg,var(--brand-2),var(--brand));
-    border-color:rgba(255,255,255,.9);box-shadow:0 2px 8px rgba(47,125,246,.28);
-  }
 
   .layout{display:grid;grid-template-columns:380px 1fr;gap:12px;height:calc(100vh - 108px);padding:12px;box-sizing:border-box}
   aside,main{background:var(--panel);border-radius:14px;overflow:auto;border:1px solid var(--line)}
@@ -38,13 +34,13 @@
   h3{margin:8px 0;font-size:1rem}
   label{display:block;margin:6px 0 4px;font-weight:700}
   input,select,button,textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;box-sizing:border-box;font-size:1rem}
-  input::placeholder{color:#9fb4cf}
   .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
   .chip{background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:6px 10px;display:flex;align-items:center;gap:8px}
   aside .row>button{background:var(--brand);color:#fff;border-color:var(--brand);font-weight:800;box-shadow:0 1px 4px rgba(47,125,246,.18)}
-  .chip>button{background:var(--danger);color:#fff;border-color:var(--danger);padding:6px 10px;border-radius:999px;font-weight:800}
+  .chip>button{padding:6px 10px;border-radius:999px;font-weight:800}
   .chip .ghost{background:#fff;color:var(--brand);border:1px solid var(--brand)}
+  .chip .danger{background:var(--danger);color:#fff;border:1px solid var(--danger)}
   .sticky-bottom .primary{background:linear-gradient(180deg,var(--brand-2),var(--brand));border-color:var(--brand);color:#fff;box-shadow:0 2px 8px rgba(47,125,246,.28)}
 
   #calendar{min-height:78vh}
@@ -53,7 +49,12 @@
     header .btns{grid-template-columns:repeat(auto-fit,minmax(120px,1fr));}
   }
 
-  .fc-v-event{border:2px solid var(--event-border);border-radius:12px;padding:4px 6px;font-weight:800;overflow:hidden;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.12);opacity:.98}
+  /* イベントの視認性アップ：太枠 + コントラスト */
+  .fc-v-event{
+    border:2px solid var(--event-border);border-radius:12px;padding:4px 6px;
+    font-weight:800;overflow:hidden;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.15);
+    opacity:.98; color:#111; text-shadow:0 1px 0 rgba(255,255,255,.45);
+  }
   .fc-v-event:hover{filter:brightness(1.04);transform:translateY(-1px);transition:.15s}
 
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:999}
@@ -81,7 +82,7 @@
   #staffBoardControls{display:none;gap:8px;align-items:center;margin:6px 0;}
   #staffBoardControls.active{display:flex;}
 
-  /* 印刷テキスト要約 */
+  /* 印刷 */
   #printView{display:none;background:#fff;padding:12px;}
   #printView h2{margin:8px 0 4px;}
   #printView h3{margin:8px 0 4px;font-size:.98rem}
@@ -129,7 +130,7 @@
     <h3>拠点（事務所）</h3>
     <div class="row">
       <input id="officeAddress" placeholder="拠点住所（例：大阪府大阪市...）">
-      <button id="btnSaveOffice">拠点保存/再ジオコーディング</button>
+      <button id="btnSaveOffice">拠点保存</button>
     </div>
     <div id="officeInfo" class="muted" style="font-size:.92rem"></div>
 
@@ -154,7 +155,7 @@
       <input id="userName" placeholder="利用者氏名（例：田中）" />
       <select id="userDuration" style="max-width:120px"><option value="60">60分</option><option value="30">30分</option></select>
     </div>
-    <input id="userAddress" placeholder="住所（任意）：例）大阪府大阪市浪速区恵美須西3-8-8" />
+    <input id="userAddress" placeholder="住所（任意）" />
     <div class="row"><button id="addUser">追加</button></div>
     <div id="userList" class="chips"></div>
 
@@ -179,7 +180,6 @@
   <main>
     <div id="calendar"></div>
 
-    <!-- スタッフ別ボード：日付コントロール -->
     <div id="staffBoardControls">
       <button id="sbPrev">◀ 前日</button>
       <input id="sbDate" type="date" style="max-width:180px">
@@ -187,7 +187,6 @@
     </div>
     <div id="staffBoard" class="grid" style="grid-template-columns: repeat(auto-fit,minmax(280px,1fr));"></div>
 
-    <!-- 印刷用のテキスト要約 -->
     <div id="printView"></div>
   </main>
 </div>
@@ -204,7 +203,17 @@ document.addEventListener('DOMContentLoaded',()=>{
   const uid=()=>Math.random().toString(36).slice(2,9);
   const isMobile=()=>window.matchMedia('(max-width:768px)').matches;
   const getWeekRange=(base)=>{const monday=new Date(base);monday.setDate(base.getDate()-((base.getDay()+6)%7));monday.setHours(0,0,0,0);return {monday,nextMonday:new Date(monday.getTime()+7*24*60*60*1000)}};
-  function colorByStaffName(name){ let h=0; for(let i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))>>>0; const hue=h%360; return `hsl(${hue} 85% 82%)`; }
+
+  // ===== 高コントラストの固定パレット（色被り最小化） =====
+  const STAFF_PALETTE = [
+    '#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd',
+    '#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf',
+    '#003f5c','#58508d','#bc5090','#ff6361','#ffa600'
+  ];
+  function colorByStaffName(name){
+    let h=0; for(let i=0;i<name.length;i++) h=(h*33+name.charCodeAt(i))>>>0;
+    return STAFF_PALETTE[h % STAFF_PALETTE.length];
+  }
   function parseTitleStaff(ev){
     const t=ev?.title||''; const ep=ev?.extendedProps||{};
     if(ep.staffName) return ep.staffName;
@@ -212,38 +221,83 @@ document.addEventListener('DOMContentLoaded',()=>{
   }
   function parseTitleUser(ev){ const m=/^(.*)（/.exec(ev.title||''); return m?m[1]:ev.title||''; }
 
-  // ===== 誤爆防止つきモーダル共通ヘルパー =====
+  // ===== 誤爆防止モーダル =====
   function armModal(overlay, box, close){
     ['pointerdown','pointerup','mousedown','mouseup','click','touchstart','touchend'].forEach(evt=>{
       box.addEventListener(evt, e=> e.stopPropagation(), {passive:true});
     });
-    let armed=false;
-    const armTimer=setTimeout(()=>{armed=true;},220);
-    const overlayHandler=(e)=>{ if(!armed) return; if(e.target===overlay) safeClose(); };
-    overlay.addEventListener('pointerdown', overlayHandler, {passive:true});
-    overlay.addEventListener('click', overlayHandler, {passive:true});
-    const onKey=(e)=>{ if(e.key==='Escape'){ safeClose(); } };
+    let armed=false; const t=setTimeout(()=>armed=true,220);
+    const onOv=(e)=>{ if(!armed) return; if(e.target===overlay) safeClose(); };
+    overlay.addEventListener('pointerdown', onOv, {passive:true});
+    overlay.addEventListener('click', onOv, {passive:true});
+    const onKey=(e)=>{ if(e.key==='Escape') safeClose(); };
     window.addEventListener('keydown', onKey);
-    const safeClose=()=>{
-      clearTimeout(armTimer);
-      overlay.removeEventListener('pointerdown', overlayHandler);
-      overlay.removeEventListener('click', overlayHandler);
-      window.removeEventListener('keydown', onKey);
-      close();
-    };
-    return safeClose;
+    function safeClose(){ clearTimeout(t); overlay.remove(); box.remove(); window.removeEventListener('keydown', onKey);}
   }
   function armAndMountModal(html){
     const overlay=document.createElement('div'); overlay.className='overlay';
     const box=document.createElement('div'); box.className='modal'; box.innerHTML=html;
     document.body.appendChild(overlay); document.body.appendChild(box);
-    const rawClose=()=>{ overlay.remove(); box.remove(); };
-    const close=armModal(overlay, box, rawClose);
-    return {overlay,box,close};
+    armModal(overlay, box, ()=>{ overlay.remove(); box.remove(); });
+    return {overlay,box,close:()=>{ overlay.remove(); box.remove(); }};
+  }
+
+  // ====== 住所近接スコア（テキスト一致に基づく擬似距離） =====
+  function normAddr(a){ return (a||'').trim().replace(/\s+/g,'').replace(/[ー−–—‐-﹣－]/g,'-'); }
+  function numericBlocks(a){ return (normAddr(a).match(/\d+/g)||[]).map(Number); }
+  function wardToken(a){
+    const s=normAddr(a);
+    const m=s.match(/(大阪市[^区]+区)/) || s.match(/(大阪市)/) || s.match(/(堺市[^区]*区)/);
+    return m?m[1]:'';
+  }
+  function areaTokens(a){
+    const s=normAddr(a);
+    const arr=[];
+    const m1=s.match(/(.+?市)/); if(m1) arr.push(m1[1]);
+    const m2=s.match(/(.+?区)/); if(m2) arr.push(m2[1]);
+    const m3=s.match(/(\d+)丁目/); if(m3) arr.push(m3[0]);
+    return arr;
+  }
+  // a（現在地）→ b（訪問先）: 大きいほど近い
+  function addressProximityScore(a,b){
+    if(!a||!b) return 0;
+    const an=normAddr(a), bn=normAddr(b);
+    let score=0;
+    // 完全包含（同一通り）に強めボーナス
+    if(an===bn) score+=50;
+    if(an.includes(bn)||bn.includes(an)) score+=30;
+
+    // 区・市の一致
+    const wa=wardToken(an), wb=wardToken(bn);
+    if(wa && wb && wa===wb) score+=20;
+
+    // 市/区/丁目のトークン一致カウント
+    const ta=areaTokens(an), tb=areaTokens(bn);
+    const setB=new Set(tb);
+    ta.forEach(t=>{ if(setB.has(t)) score+=8; });
+
+    // 番地近似：共通数字の先頭一致
+    const na=numericBlocks(an), nb=numericBlocks(bn);
+    const len=Math.min(na.length, nb.length);
+    for(let i=0;i<len;i++){
+      if(na[i]===nb[i]) score+=5;
+      else break;
+    }
+    // 末尾も近ければ微加点
+    if(na.length&&nb.length && na[na.length-1]===nb[nb.length-1]) score+=2;
+
+    // 文字列類似の粗スコア
+    const prefixL = commonPrefixLen(an,bn);
+    score += Math.min(prefixL, 10); // 最大10点
+
+    return score;
+  }
+  function commonPrefixLen(a,b){
+    const n=Math.min(a.length,b.length); let i=0; for(;i<n;i++){ if(a[i]!==b[i]) break; } return i;
   }
 
   // ====== State ======
-  let office={address:'', lat:null, lng:null};
+  let office={address:''};
   let staff=[], users=[], patterns=[], shifts=[], events=[];
   let skippedAssignments=[];
   let viewMode='standard';
@@ -276,7 +330,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   const load=()=>{try{
     const raw=localStorage.getItem(STORAGE_KEY); if(!raw) return;
     const d=JSON.parse(raw);
-    office = d.office||{address:'',lat:null,lng:null};
+    office = d.office||{address:''};
     staff=(d.staff||[]).map(s=>({...s, ngUserIds: s.ngUserIds||[]}));
     users=(d.users||[]).map(u=>({...u}));
     patterns=d.patterns||[]; shifts=d.shifts||[];
@@ -302,7 +356,6 @@ document.addEventListener('DOMContentLoaded',()=>{
 
     el.ngUsers.innerHTML=''; usersSorted.forEach(u=>{ const lab=document.createElement('label'); lab.className='chip'; lab.innerHTML=`<input type="checkbox" value="${u.id}"> ${u.name}`; el.ngUsers.appendChild(lab); });
 
-    // NG 既存チェックの反映
     el.ngStaff.addEventListener('change', ()=>{
       const sid=el.ngStaff.value; const st=staff.find(x=>x.id===sid);
       el.ngUsers.querySelectorAll('input[type="checkbox"]').forEach(ch=>{
@@ -323,7 +376,7 @@ document.addEventListener('DOMContentLoaded',()=>{
         <span class='chip'>
           ${s.name}（${s.type==='PT'?'非常勤':'常勤'}） ${ngText}
           <button class='ghost editStaff' data-id='${s.id}'>編集</button>
-          <button class='delStaff' data-id='${s.id}'>削除</button>
+          <button class='danger delStaff' data-id='${s.id}'>削除</button>
         </span>`;
     });
   };
@@ -332,12 +385,11 @@ document.addEventListener('DOMContentLoaded',()=>{
     el.userList.innerHTML='';
     usersSorted.forEach(u=>{
       const addr=u.address||'(住所なし)';
-      const latlng='(住所スコア方式 / 座標不要)';
       el.userList.innerHTML+=`
         <span class='chip'>
-          ${u.name}（${u.duration||60}分） ｜ 住所：${addr} ｜ ${latlng}
+          ${u.name}（${u.duration||60}分） ｜ 住所：${addr}
           <button class='ghost editUser' data-id='${u.id}'>編集</button>
-          <button class='delUser' data-id='${u.id}'>削除</button>
+          <button class='danger delUser' data-id='${u.id}'>削除</button>
         </span>`;
     });
   };
@@ -349,7 +401,7 @@ document.addEventListener('DOMContentLoaded',()=>{
       <span class='chip'>
         ${u?u.name:'不明'}：${(p.days||[]).join('・')} ${p.time||''}
         <button class='ghost editPattern' data-id='${p.id}'>編集</button>
-        <button class='delPattern' data-id='${p.id}'>削除</button>
+        <button class='danger delPattern' data-id='${p.id}'>削除</button>
       </span>`;
     });
   };
@@ -361,14 +413,13 @@ document.addEventListener('DOMContentLoaded',()=>{
         <span class='chip'>
           ${stf?stf.name:'不明'}：${s.days.join('・')} ${s.start}〜${s.end}
           <button class='ghost editShift' data-id='${s.id}'>編集</button>
-          <button class='delShift' data-id='${s.id}'>削除</button>
+          <button class='danger delShift' data-id='${s.id}'>削除</button>
         </span>`;
     });
   };
   const renderOffice=()=>{
     el.officeAddress.value = office.address||'';
-    const txt = office.address ? `（座標不要：住所スコア方式）` : '未設定';
-    el.officeInfo.textContent = office.address ? `${office.address} ｜ ${txt}` : '未設定';
+    el.officeInfo.textContent = office.address ? office.address : '未設定';
   }
   const renderAll=()=>{ hydrateSelects(); renderStaff(); renderUsers(); renderPatterns(); renderShifts(); renderOffice(); };
 
@@ -390,6 +441,7 @@ document.addEventListener('DOMContentLoaded',()=>{
       info.event.setProp('backgroundColor', col);
       info.event.setProp('borderColor', 'var(--event-border)');
       info.el.style.background=col; info.el.style.borderColor='var(--event-border)';
+      info.el.style.color = '#111';
     },
     eventDrop:(info)=>{ snapAndPersist(info.event); syncStaffBoardIfOpen(); },
     eventResize:(info)=>{ snapAndPersist(info.event); syncStaffBoardIfOpen(); },
@@ -415,7 +467,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     save();
   }
 
-  // ====== イベント新規作成（手打ち＋選択どちらも可） ======
+  // ====== イベント新規作成 ======
   function openCreateEventDialog(defaultStart){
     const def = new Date(defaultStart||Date.now());
     const ymd = fmtDateLocal(def);
@@ -546,7 +598,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     };
   }
 
-  // ====== 自動割当（従来ロジック・住所スコア方式は別箇所で適用） ======
+  // ====== 近さ優先 → 均等化の自動割当 ======
   function countAssignedForWeek(staffName, monday, nextMonday){
     let c=0;
     (events||[]).forEach(ev=>{
@@ -555,6 +607,25 @@ document.addEventListener('DOMContentLoaded',()=>{
     });
     return c;
   }
+  function lastAddressOfStaffOnDay(staffName, dayDate, untilHHMM){
+    // 指定日のその時間までで最も遅いイベントの住所。なければ拠点住所
+    const dayStr=fmtDateLocal(dayDate);
+    const until = new Date(`${dayStr}T${untilHHMM}:00`);
+    let lastEv=null;
+    (events||[]).forEach(ev=>{
+      const sn=parseTitleStaff(ev); if(sn!==staffName) return;
+      const s=new Date(ev.start);
+      if(fmtDateLocal(s)!==dayStr) return;
+      if(s < until && (!lastEv || s>new Date(lastEv.start))) lastEv=ev;
+    });
+    if(lastEv){
+      const uName=parseTitleUser(lastEv);
+      const u = users.find(x=>x.name===uName);
+      return u?.address || office.address || '';
+    }
+    return office.address || '';
+  }
+
   function autoAssignWeek(){
     if(staff.length===0){ alert('スタッフを登録してください'); return; }
     if(users.length===0){ alert('利用者を登録してください'); return; }
@@ -565,6 +636,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     const monday = rng.monday; const nextMonday = rng.nextMonday;
     const inWeek = (iso)=>{ const d=new Date(iso); return d>=monday && d<nextMonday; };
 
+    // 表示週の既存イベントは消してから再配置
     events = (events||[]).filter(ev=> !inWeek(ev.start));
     skippedAssignments = [];
 
@@ -588,10 +660,10 @@ document.addEventListener('DOMContentLoaded',()=>{
         const endISO   = `${fmtDateLocal(day)}T${en}:00`;
         const dayLabel = weekdayLabel(day);
 
-        const candidates = staff.filter(s=> hasShiftLocal(s.id,dayLabel,st,en));
-        const pt = candidates.filter(c=> c.type==='PT' && !(c.ngUserIds||[]).includes(u.id));
-        const ft = candidates.filter(c=> c.type==='FT' && !(c.ngUserIds||[]).includes(u.id));
+        // 出勤候補
+        const candidates = staff.filter(s=> hasShiftLocal(s.id,dayLabel,st,en) && !(s.ngUserIds||[]).includes(u.id));
 
+        // 被りチェック
         const placeable=(cand)=>{
           const sn=cand.name; const ns=new Date(startISO), ne=new Date(endISO);
           const clash = (events||[]).some(ev=>{
@@ -603,17 +675,22 @@ document.addEventListener('DOMContentLoaded',()=>{
           return !clash;
         };
 
-        let picked=null;
-        for(const cand of pt){ if(placeable(cand)){ picked=cand; break; } }
-        if(!picked && ft.length){
-          const withCount = ft.map(c=>({c, cnt: countAssignedForWeek(c.name,monday,nextMonday)}))
-                              .sort((a,b)=> a.cnt-b.cnt || a.c.name.localeCompare(b.c.name,'ja'));
-          for(const item of withCount){ if(placeable(item.c)){ picked=item.c; break; } }
-        }
-        if (!picked) {
+        // 近さ優先：現在地（その日の直前イベントの利用者住所→なければ拠点住所）からの近接スコア
+        const scored = candidates.map(c=>{
+          const currentAddr = lastAddressOfStaffOnDay(c.name, day, st) || office.address || '';
+          const score = addressProximityScore(currentAddr, u.address||'');
+          const weeklyCount = countAssignedForWeek(c.name, monday, nextMonday);
+          return {c, score, weeklyCount};
+        }).filter(x=> placeable(x.c));
+
+        if(scored.length===0){
           skippedAssignments.push({reason:'割当不可（NG/重複/不在）', userId:u.id, date:fmtDateLocal(day), start:st, end:en});
           continue;
         }
+
+        // ソート規則：近さ（desc）→ 均等化（weeklyCount asc）→ 名前
+        scored.sort((a,b)=> (b.score - a.score) || (a.weeklyCount - b.weeklyCount) || a.c.name.localeCompare(b.c.name,'ja'));
+        const picked = scored[0].c;
 
         const col=colorByStaffName(picked.name);
         events.push({
@@ -631,6 +708,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     alert(`自動割当 完了：配置 ${placed} 件 / 見送り ${skippedAssignments.length} 件（表示週）`);
   }
 
+  // ===== 見送り一覧モーダル =====
   function showSkippedModal(){
     if(!skippedAssignments.length) return;
     const rows = skippedAssignments.map((s,idx)=>{
@@ -690,7 +768,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     box.querySelector('#skClose').onclick=close;
   }
 
-  // ====== スタッフ別ボード（＋日付選択） ======
+  // ====== スタッフ別ボード（相互同期・ドラッグ可） ======
   let staffCalendars=[];
   function renderStaffBoard(){
     staffCalendars.forEach(sc=> sc.cal.destroy());
@@ -723,8 +801,8 @@ document.addEventListener('DOMContentLoaded',()=>{
         eventDidMount:(info)=>{
           const colr=colorByStaffName(s.name);
           info.el.style.background=colr; info.el.style.borderColor='var(--event-border)';
+          info.el.style.color='#111';
         },
-        // サブ→メインへ変更を反映
         eventDrop:(info)=>{
           const ev = info.event;
           const idx = events.findIndex(x=>x.id===ev.id);
@@ -775,7 +853,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   el.sbNext.addEventListener('click',()=>{ staffBoardDate.setDate(staffBoardDate.getDate()+1); renderStaffBoard(); });
   el.sbDate.addEventListener('change',(e)=>{ const v=e.target.value; if(v){ staffBoardDate=new Date(v+'T00:00:00'); renderStaffBoard(); }});
 
-  // ====== 印刷：現在の表示に合わせて片方のみ ======
+  // ====== 印刷 ======
   function buildPrintHTML(){
     el.printView.innerHTML='';
     if(viewMode==='standard'){
@@ -887,11 +965,10 @@ document.addEventListener('DOMContentLoaded',()=>{
   // ====== データ変更系 ======
   const renderWeekdayChecks=(c)=>{ c.innerHTML=''; dayNamesJP.forEach(d=>{ const w=document.createElement('label'); w.className='chip'; w.innerHTML=`<input type="checkbox" value="${d}"> ${d}`; c.appendChild(w); }); };
 
-  // 拠点保存（住所スコア方式：座標不要）
   el.btnSaveOffice?.addEventListener('click', ()=>{
     office.address = (el.officeAddress.value||'').trim();
     save(); renderOffice();
-    alert('拠点を保存しました（住所スコア方式、座標は不要）');
+    alert('拠点を保存しました');
   });
 
   el.addStaff?.addEventListener('click',()=>{
@@ -950,7 +1027,7 @@ document.addEventListener('DOMContentLoaded',()=>{
           </select>
         </div>
       </div>
-      <label>住所（任意／座標不要）</label>
+      <label>住所（任意）</label>
       <input id="euAddr" value="${u.address||''}">
       <div class="actions">
         <button id="euSave" class="btn primary">保存</button>
